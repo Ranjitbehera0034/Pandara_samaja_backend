@@ -24,7 +24,7 @@ exports.bulkImport = async (req, res) => {
   }
 
   try {
-    await memberModel.bulkImport(rows);
+    await model.bulkImport(rows);
     res.sendStatus(204);              // success, no payload
   } catch (err) {
     console.error('Bulk import error:', err);
