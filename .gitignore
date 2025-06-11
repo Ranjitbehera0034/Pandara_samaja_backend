@@ -1,4 +1,1 @@
-# correct – each line is appended to the file
-echo "node_modules/" >> .gitignore
-echo ".env"          >> .gitignore
-echo "uploads/"      >> .gitignore
+/node_modules
