@@ -19,13 +19,14 @@ exports.search = async (req, res) => {
 
 exports.bulkImport = async (req, res) => {
   const { rows } = req.body;
+
   if (!Array.isArray(rows) || rows.length === 0) {
     return res.status(400).json({ message: 'No rows supplied' });
   }
 
   try {
     await model.bulkImport(rows);
-    res.sendStatus(204);              // success, no payload
+    res.sendStatus(204);               // success, no payload
   } catch (err) {
     console.error('Bulk import error:', err);
     res.status(500).json({ message: 'Bulk import failed' });
