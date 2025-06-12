@@ -45,7 +45,8 @@ app.use(
 );
 
 /* ─── 3. Body-parser & routes ─────────────────────────────── */
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '5mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
 
 app.use('/api/candidates', require('./routes/candidateRoutes'));
 app.use('/api/members',    require('./routes/memberRoutes'));
