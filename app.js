@@ -54,6 +54,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 app.use('/api/candidates', require('./routes/candidateRoutes')(upload));
 app.use('/api/members',    require('./routes/memberRoutes'));
+app.use('/api/posts', require('./routes/blogRoutes'));
+
 
 /* ─── 4. Start server ─────────────────────────────────────── */
 const PORT = process.env.PORT || 5000;
