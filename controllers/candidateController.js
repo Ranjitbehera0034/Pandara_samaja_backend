@@ -20,21 +20,28 @@ exports.getOne = async (req,res) => {
     res.json(result.rows[0]);
 }
 
+// controllers/candidateController.js
 exports.create = async (req, res) => {
   try {
-    const data = req.body;
+    const data = { ...req.body };
+
+    // convert empty strings to null
+    Object.keys(data).forEach(k => {
+      if (data[k] === "") data[k] = null;
+    });
 
     if (req.file) {
-      data.photo = await gDrive.uploadFile(req.file); // public URL
+      data.photo = await gDrive.uploadFile(req.file);
     }
 
     const result = await model.createCandidate(data);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('Create candidate error:', err);
+    console.error(err);
     res.status(500).json({ error: 'Failed to create candidate' });
   }
 };
+
 
 exports.update = async (req, res) => {
   try {
