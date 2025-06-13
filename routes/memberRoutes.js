@@ -1,7 +1,6 @@
 const express = require('express');
-const router = express.Router();
 const controller = require('../controllers/memberController');
-
+const router = express.Router();
 router.get('/', controller.getAll);
 router.get('/by-location', controller.getByLocation);
 router.get('/search', controller.search);

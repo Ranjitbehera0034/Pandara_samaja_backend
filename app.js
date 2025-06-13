@@ -2,6 +2,7 @@
 const express = require('express');
 const cors    = require('cors');
 const bodyParser = require('body-parser');
+const multer      = require('multer');
 require('dotenv').config();
 
 const app = express();
@@ -48,7 +49,10 @@ app.use(
 app.use(bodyParser.json({ limit: '5mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
 
-app.use('/api/candidates', require('./routes/candidateRoutes'));
+/* ─── 3. Upload folder + multer ───────────────────────────── */
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.use('/api/candidates', require('./routes/candidateRoutes')(upload));
 app.use('/api/members',    require('./routes/memberRoutes'));
 
 /* ─── 4. Start server ─────────────────────────────────────── */

@@ -1,7 +1,7 @@
 {
   "name": "pandara-samaja-backend",
   "version": "1.0.0",
-  "main": "app.js", 
+  "main": "app.js",
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js"
@@ -15,6 +15,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "googleapis": "^150.0.1",
+    "mime-types": "^3.0.1",
     "multer": "^2.0.0",
     "pg": "^8.16.0"
   },

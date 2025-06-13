@@ -1,4 +1,8 @@
+const gDrive = require('../config/googleDrive'); 
 const model = require('../models/candidateModel');
+const fs     = require('fs');
+
+
 
 // controller
 exports.getAll = async (req, res) => {
@@ -19,13 +23,16 @@ exports.getOne = async (req,res) => {
 exports.create = async (req, res) => {
   try {
     const data = req.body;
+
     if (req.file) {
-      data.photo = "/uploads/" + req.file.filename;
+      data.photo = await gDrive.uploadFile(req.file); // public URL
     }
+
     const result = await model.createCandidate(data);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: "Failed to create candidate" });
+    console.error('Create candidate error:', err);
+    res.status(500).json({ error: 'Failed to create candidate' });
   }
 };
 
@@ -34,7 +41,8 @@ exports.update = async (req, res) => {
     const id = req.params.id;
     const data = req.body;
     if (req.file) {
-      data.photo = "/uploads/" + req.file.filename;
+      data.photo = await gDrive.uploadFile(req.file); // public URL
+      fs.unlinkSync(req.file.path)
     }
     const result = await model.updateCandidate(id, data);
     res.json(result.rows[0]);
@@ -47,4 +55,6 @@ exports.remove = async (req,res) => {
     await model.remove(req.params.id);
   res.status(204).send();
 }
+
+
 
