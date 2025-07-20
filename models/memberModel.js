@@ -29,17 +29,18 @@ exports.bulkImport = async (rows) => {
     /* prepared statement once, re-used inside the loop */
     const stmt = `
       INSERT INTO members
-        (membership_no,name, mobile, male, female,
-         district, taluka, panchayat, village)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-      ON CONFLICT (membership_no) DO UPDATE SET
-        name       = EXCLUDED.name,
-        male       = EXCLUDED.male,
-        female     = EXCLUDED.female,
-        district   = EXCLUDED.district,
-        taluka     = EXCLUDED.taluka,
-        panchayat  = EXCLUDED.panchayat,
-        village    = EXCLUDED.village
+    (membership_no, name, mobile, male, female,
+     district, taluka, panchayat, village)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+  ON CONFLICT (membership_no) DO UPDATE SET
+    name       = EXCLUDED.name,
+    mobile     = EXCLUDED.mobile,
+    male       = EXCLUDED.male,
+    female     = EXCLUDED.female,
+    district   = EXCLUDED.district,
+    taluka     = EXCLUDED.taluka,
+    panchayat  = EXCLUDED.panchayat,
+    village    = EXCLUDED.village;
     `;
 
     for (const r of rows) {
