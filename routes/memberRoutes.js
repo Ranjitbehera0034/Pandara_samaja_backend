@@ -4,5 +4,5 @@ const router = express.Router();
 router.get('/', controller.getAll);
 router.get('/by-location', controller.getByLocation);
 router.get('/search', controller.search);
-router.get('/export/excel', ctrl.exportExcel);
+router.get('/export/excel', controller.exportExcel);
 module.exports = router;
