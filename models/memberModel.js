@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const ExcelJS = require('exceljs');
+const Cursor = require('pg-cursor'); 
 
 exports.getAll = async () => {
   return pool.query("SELECT * FROM members ORDER BY district, taluka, panchayat, name");
@@ -28,7 +29,7 @@ exports.exportExcel = async (stream) => {
   const workbook = new ExcelJS.Workbook();
   const sheet    = workbook.addWorksheet('Members');
 
-  /* 1. Header row ------------------------------------------------------- */
+  /* 1. Header row ------------------------------------------------------ */
   sheet.columns = [
     { header: 'Membership No.', key: 'membership_no', width: 15 },
     { header: 'Name',           key: 'name',          width: 25 },
@@ -41,26 +42,27 @@ exports.exportExcel = async (stream) => {
     { header: 'Village',        key: 'village',       width: 15 }
   ];
 
-  /* 2. Fetch rows in a cursor to avoid loading everything into RAM ------ */
+  /* 2. Stream rows 500 at a time with pg‑cursor ------------------------ */
   const client = await pool.connect();
   try {
-    const cursor = client.query(new (require('pg-cursor'))(
-      `SELECT membership_no, name, mobile, male, female,
-              district, taluka, panchayat, village
-       FROM   public.members
-       ORDER  BY district, taluka, panchayat, name`
-    ));
+    const cursor = client.query(new Cursor(`
+      SELECT membership_no, name, mobile, male, female,
+             district, taluka, panchayat, village
+      FROM   public.members
+      ORDER  BY district, taluka, panchayat, name
+    `));
 
-    const batch = 500;                   // adjust for memory/perf
-    let   rows;
-    while ((rows = await cursor.read(batch)).length) {
-      sheet.addRows(rows);
+    const batchSize = 500;
+    let rows;
+    // eslint-disable-next-line no-cond-assign
+    while ((rows = await cursor.read(batchSize)).length) {
+      sheet.addRows(rows);             // push straight into worksheet
     }
     await cursor.close();
   } finally {
     client.release();
   }
 
-  /* 3. Write workbook to the response stream --------------------------- */
+  /* 3. Pipe workbook to the outgoing HTTP stream ---------------------- */
   await workbook.xlsx.write(stream);
 };
