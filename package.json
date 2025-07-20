@@ -19,7 +19,8 @@
     "googleapis": "^150.0.1",
     "mime-types": "^3.0.1",
     "multer": "^2.0.0",
-    "pg": "^8.16.0"
+    "pg": "^8.16.0",
+    "pg-cursor": "^2.15.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
