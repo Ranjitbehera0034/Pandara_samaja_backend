@@ -29,10 +29,10 @@ exports.bulkImport = async (rows) => {
     /* prepared statement once, re-used inside the loop */
     const stmt = `
       INSERT INTO members
-        (name, mobile, male, female,
+        (membership_no,name, mobile, male, female,
          district, taluka, panchayat, village)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-      ON CONFLICT (mobile) DO UPDATE SET
+      ON CONFLICT (membership_no) DO UPDATE SET
         name       = EXCLUDED.name,
         male       = EXCLUDED.male,
         female     = EXCLUDED.female,
@@ -44,6 +44,7 @@ exports.bulkImport = async (rows) => {
 
     for (const r of rows) {
       await client.query(stmt, [
+        (r.membership_no || '').trim(), 
         r.name.trim(),
         r.mobile.trim(),
         Number(r.male   || 0),
