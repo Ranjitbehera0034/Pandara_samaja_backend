@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const ExcelJS = require('exceljs');
 
 exports.getAll = async () => {
   return pool.query("SELECT * FROM members ORDER BY district, taluka, panchayat, name");
@@ -19,49 +20,47 @@ exports.search = async (keyword) => {
   );
 };
 
-exports.bulkImport = async (rows) => {
-  if (!Array.isArray(rows) || rows.length === 0) return;
+/**
+ * Streams the members table into an Excel workbook.
+ * @param {Writable} stream – the writable response stream (res)
+ */
+exports.exportExcel = async (stream) => {
+  const workbook = new ExcelJS.Workbook();
+  const sheet    = workbook.addWorksheet('Members');
 
+  /* 1. Header row ------------------------------------------------------- */
+  sheet.columns = [
+    { header: 'Membership No.', key: 'membership_no', width: 15 },
+    { header: 'Name',           key: 'name',          width: 25 },
+    { header: 'Mobile',         key: 'mobile',        width: 10 },
+    { header: 'Male',           key: 'male',          width: 6 },
+    { header: 'Female',         key: 'female',        width: 6 },
+    { header: 'District',       key: 'district',      width: 15 },
+    { header: 'Taluka',         key: 'taluka',        width: 15 },
+    { header: 'Panchayat',      key: 'panchayat',     width: 15 },
+    { header: 'Village',        key: 'village',       width: 15 }
+  ];
+
+  /* 2. Fetch rows in a cursor to avoid loading everything into RAM ------ */
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    const cursor = client.query(new (require('pg-cursor'))(
+      `SELECT membership_no, name, mobile, male, female,
+              district, taluka, panchayat, village
+       FROM   public.members
+       ORDER  BY district, taluka, panchayat, name`
+    ));
 
-    /* prepared statement once, re-used inside the loop */
-    const stmt = `
-      INSERT INTO members
-    (membership_no, name, mobile, male, female,
-     district, taluka, panchayat, village)
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-  ON CONFLICT (membership_no) DO UPDATE SET
-    name       = EXCLUDED.name,
-    mobile     = EXCLUDED.mobile,
-    male       = EXCLUDED.male,
-    female     = EXCLUDED.female,
-    district   = EXCLUDED.district,
-    taluka     = EXCLUDED.taluka,
-    panchayat  = EXCLUDED.panchayat,
-    village    = EXCLUDED.village;
-    `;
-
-    for (const r of rows) {
-      await client.query(stmt, [
-        (r.membership_no || '').trim(), 
-        r.name.trim(),
-        r.mobile.trim(),
-        Number(r.male   || 0),
-        Number(r.female || 0),
-        (r.district  || '').trim(),
-        (r.taluka    || '').trim(),
-        (r.panchayat || '').trim(),
-        (r.village   || '').trim()
-      ]);
+    const batch = 500;                   // adjust for memory/perf
+    let   rows;
+    while ((rows = await cursor.read(batch)).length) {
+      sheet.addRows(rows);
     }
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;                         // let controller handle the 500
+    await cursor.close();
   } finally {
     client.release();
   }
+
+  /* 3. Write workbook to the response stream --------------------------- */
+  await workbook.xlsx.write(stream);
 };

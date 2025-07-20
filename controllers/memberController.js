@@ -17,19 +17,22 @@ exports.search = async (req, res) => {
   res.json(data.rows);
 };
 
-exports.bulkImport = async (req, res) => {
-  const { rows } = req.body;
-
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return res.status(400).json({ message: 'No rows supplied' });
-  }
-
+exports.exportExcel = async (req, res) => {
   try {
-    await model.bulkImport(rows);
-    res.sendStatus(204);               // success, no payload
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="members.xlsx"'
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+
+    await model.exportExcel(res);   // stream directly into response
+    res.end();
   } catch (err) {
-    console.error('Bulk import error:', err);
-    res.status(500).json({ message: 'Bulk import failed' });
+    console.error('Excel export error:', err);
+    res.status(500).json({ message: 'Failed to export members' });
   }
 };
 
