@@ -79,3 +79,35 @@ exports.importExcel = async (req, res) => {
   }
 };
 
+exports.importRows = async (req, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!rows.length) {
+      return res.status(400).json({ message: 'No rows provided' });
+    }
+
+    // sanitize / normalize a bit, and drop obviously blank items
+    const clean = rows.map(r => ({
+      membership_no: (r.membership_no ?? '').toString().trim(),
+      name:          (r.name ?? '').toString().trim(),
+      mobile:        (r.mobile ?? '').toString().replace(/\D/g, ''),
+      male:          r.male === '' || r.male == null ? null : Number(r.male),
+      female:        r.female === '' || r.female == null ? null : Number(r.female),
+      district:      (r.district ?? '').toString().trim(),
+      taluka:        (r.taluka ?? '').toString().trim(),
+      panchayat:     (r.panchayat ?? '').toString().trim(),
+      village:       (r.village ?? '').toString().trim()
+    })).filter(r => r.membership_no && r.name);
+
+    if (!clean.length) {
+      return res.status(400).json({ message: 'No valid rows after cleaning' });
+    }
+
+    const imported = await model.bulkUpsertMembers(clean);
+    return res.json({ imported });
+  } catch (err) {
+    console.error('JSON import error:', err);
+    return res.status(500).json({ message: 'Failed to import members' });
+  }
+};
+

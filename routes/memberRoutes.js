@@ -1,17 +1,16 @@
+// routes/members.js (example)
 const express = require('express');
 const multer  = require('multer');
-const ctrl    = require('../controllers/memberController');
+const upload  = multer({ dest: 'uploads/' });
+
+const memberController = require('../controllers/memberController');
 
 const router = express.Router();
 
-// define upload BEFORE using it
-const upload = multer({ dest: 'uploads/' }); // or multer.memoryStorage()
+// File upload endpoint (already expected by importExcel)
+router.post('/members/import', upload.single('file'), memberController.importExcel);
 
-router.get('/members/export', ctrl.exportExcel);
-router.post('/members/import', upload.single('file'), ctrl.importExcel); // uses upload
-
-router.get('/members', ctrl.getAll);
-router.get('/members/location', ctrl.getByLocation);
-router.get('/members/search', ctrl.search);
+// New: JSON rows endpoint
+router.post('/members/import-rows', memberController.importRows);
 
 module.exports = router;
