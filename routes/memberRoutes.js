@@ -7,6 +7,7 @@ const memberController = require('../controllers/memberController');
 
 const router = express.Router();
 
+router.get('/', memberController.getAll);
 // File upload endpoint (already expected by importExcel)
 router.post('/import', upload.single('file'), memberController.importExcel);
 

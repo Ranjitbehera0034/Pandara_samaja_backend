@@ -82,7 +82,6 @@ exports.importExcel = async (req, res) => {
 const MAXLEN = {
   membership_no: 10,
   mobile: 10,
-  // add others if your table has small varchar columns
 };
 
 const toDigits = v => (v ?? '').toString().replace(/\D/g, '');
@@ -93,45 +92,71 @@ exports.importRows = async (req, res) => {
     if (!src.length) return res.status(400).json({ message: 'No rows provided' });
 
     const warnings = [];
-    const clean = src.map((r, i) => {
-      const rowNum = i + 2; // header is usually row 1
-
+    const prepared = src.map((r, i) => {
+      const rowNum = i + 2;
       const rec = {
         membership_no: (r.membership_no ?? '').toString().trim(),
         name:          (r.name ?? '').toString().trim(),
         mobile:        toDigits(r.mobile),
-        male:          r.male === '' || r.male == null ? null : Number(r.male),
-        female:        r.female === '' || r.female == null ? null : Number(r.female),
+        male:          (r.male === '' || r.male == null || isNaN(Number(r.male))) ? null : Number(r.male),
+        female:        (r.female === '' || r.female == null || isNaN(Number(r.female))) ? null : Number(r.female),
         district:      (r.district ?? '').toString().trim(),
         taluka:        (r.taluka ?? '').toString().trim(),
         panchayat:     (r.panchayat ?? '').toString().trim(),
         village:       (r.village ?? '').toString().trim(),
       };
 
-      // length -> null policy
-      for (const [field, max] of Object.entries(MAXLEN)) {
-        const v = rec[field];
-        if (v && v.length > max) {
-          warnings.push({ row: rowNum, field, reason: `length>${max}`, value: v, length: v.length });
-          rec[field] = null;
-        }
+      // Mandatory fields
+      if (!rec.membership_no) {
+        warnings.push({ row: rowNum, field: 'membership_no', reason: 'missing membership_no' });
+        return null;
+      }
+      if (!rec.name) {
+        warnings.push({ row: rowNum, field: 'name', reason: 'missing name' });
+        return null;
       }
 
-      // you may also want to null truly empty strings
-      Object.keys(rec).forEach(k => {
-        if (rec[k] === '') rec[k] = null;
-      });
+      // Length checks: skip rows with overlong membership_no, truncate mobile
+      if (rec.membership_no.length > MAXLEN.membership_no) {
+      warnings.push({ row: rowNum, field: 'membership_no', reason: `length>${MAXLEN.membership_no}`, value: rec.membership_no });
+      return null; // skip entirely, since membership_no must be valid
+      }
+      if (rec.mobile && rec.mobile.length > MAXLEN.mobile) {
+        warnings.push({ row: rowNum, field: 'mobile', reason: `length>${MAXLEN.mobile}`, value: rec.mobile });
+        rec.mobile = rec.mobile.slice(0, MAXLEN.mobile);
+      }
 
-      return rec;
+      return { rec, rowNum };
     })
-    // keep rows that at least have a name; membership_no can be null as per requirement
-    .filter(r => r.name);
+    .filter(Boolean);
 
-    const imported = await model.bulkUpsertMembers(clean);
+    // Deduplicate by membership_no
+    const deduped = [];
+    const seen = new Map();
+    for (const { rec, rowNum } of prepared) {
+      if (seen.has(rec.membership_no)) {
+        warnings.push({
+          row: rowNum,
+          field: 'membership_no',
+          reason: `Duplicate membership_no '${rec.membership_no}' within this upload; keeping the first`,
+        });
+        continue;
+      }
+      seen.set(rec.membership_no, true);
+      deduped.push(rec);
+    }
+
+    const imported = await model.bulkUpsertMembers(deduped);
     return res.json({ imported, warnings });
   } catch (err) {
     console.error('JSON import error:', err);
     return res.status(500).json({ message: 'Failed to import members' });
   }
 };
+
+
+
+
+
+
 
