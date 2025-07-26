@@ -89,11 +89,11 @@ exports.bulkUpsertMembers = async (rows) => {
     await client.query('BEGIN');
 
     const sql = format(`
-      INSERT INTO members
+      INSERT INTO public.members
         (membership_no, name, mobile, male, female,
          district, taluka, panchayat, village)
       VALUES %L
-      ON CONFLICT (membership_no) DO UPDATE
+      ON CONFLICT ON CONSTRAINT members_membership_no_key DO UPDATE
         SET name      = EXCLUDED.name,
             mobile    = EXCLUDED.mobile,
             male      = EXCLUDED.male,
