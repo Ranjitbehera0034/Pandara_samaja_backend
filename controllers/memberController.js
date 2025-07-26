@@ -79,32 +79,56 @@ exports.importExcel = async (req, res) => {
   }
 };
 
+const MAXLEN = {
+  membership_no: 10,
+  mobile: 10,
+  // add others if your table has small varchar columns
+};
+
+const toDigits = v => (v ?? '').toString().replace(/\D/g, '');
+
 exports.importRows = async (req, res) => {
   try {
-    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-    if (!rows.length) {
-      return res.status(400).json({ message: 'No rows provided' });
-    }
+    const src = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!src.length) return res.status(400).json({ message: 'No rows provided' });
 
-    // sanitize / normalize a bit, and drop obviously blank items
-    const clean = rows.map(r => ({
-      membership_no: (r.membership_no ?? '').toString().trim(),
-      name:          (r.name ?? '').toString().trim(),
-      mobile:        (r.mobile ?? '').toString().replace(/\D/g, ''),
-      male:          r.male === '' || r.male == null ? null : Number(r.male),
-      female:        r.female === '' || r.female == null ? null : Number(r.female),
-      district:      (r.district ?? '').toString().trim(),
-      taluka:        (r.taluka ?? '').toString().trim(),
-      panchayat:     (r.panchayat ?? '').toString().trim(),
-      village:       (r.village ?? '').toString().trim()
-    })).filter(r => r.membership_no && r.name);
+    const warnings = [];
+    const clean = src.map((r, i) => {
+      const rowNum = i + 2; // header is usually row 1
 
-    if (!clean.length) {
-      return res.status(400).json({ message: 'No valid rows after cleaning' });
-    }
+      const rec = {
+        membership_no: (r.membership_no ?? '').toString().trim(),
+        name:          (r.name ?? '').toString().trim(),
+        mobile:        toDigits(r.mobile),
+        male:          r.male === '' || r.male == null ? null : Number(r.male),
+        female:        r.female === '' || r.female == null ? null : Number(r.female),
+        district:      (r.district ?? '').toString().trim(),
+        taluka:        (r.taluka ?? '').toString().trim(),
+        panchayat:     (r.panchayat ?? '').toString().trim(),
+        village:       (r.village ?? '').toString().trim(),
+      };
+
+      // length -> null policy
+      for (const [field, max] of Object.entries(MAXLEN)) {
+        const v = rec[field];
+        if (v && v.length > max) {
+          warnings.push({ row: rowNum, field, reason: `length>${max}`, value: v, length: v.length });
+          rec[field] = null;
+        }
+      }
+
+      // you may also want to null truly empty strings
+      Object.keys(rec).forEach(k => {
+        if (rec[k] === '') rec[k] = null;
+      });
+
+      return rec;
+    })
+    // keep rows that at least have a name; membership_no can be null as per requirement
+    .filter(r => r.name);
 
     const imported = await model.bulkUpsertMembers(clean);
-    return res.json({ imported });
+    return res.json({ imported, warnings });
   } catch (err) {
     console.error('JSON import error:', err);
     return res.status(500).json({ message: 'Failed to import members' });
