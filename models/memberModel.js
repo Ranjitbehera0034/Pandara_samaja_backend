@@ -17,9 +17,62 @@ exports.getAllByLocation = async (district, taluka, panchayat) => {
 exports.search = async (keyword) => {
   const q = `%${keyword}%`;
   return pool.query(
-    "SELECT * FROM members WHERE LOWER(name) LIKE LOWER($1) OR mobile LIKE $1",
+    "SELECT * FROM members WHERE LOWER(name) LIKE LOWER($1) OR mobile LIKE $1 OR membership_no LIKE $1",
     [q]
   );
+};
+
+exports.getOne = async (id) => {
+  // Use membership_no as the primary identifier since 'id' column does not exist
+  const res = await pool.query("SELECT * FROM members WHERE membership_no = $1", [id]);
+  return res.rows[0];
+};
+
+exports.update = async (id, data) => {
+  // Fetch existing record to support partial updates and avoid undefined params
+  const existing = await exports.getOne(id);
+  if (!existing) return null;
+
+  // Helper to sanitize numeric fields
+  const toIntOrNull = (val) => {
+    if (val === null || val === undefined || val === '') return null;
+    const n = Number(val);
+    return isNaN(n) ? null : n;
+  };
+
+  // Merge existing data with new data
+  const merged = { ...existing, ...data };
+
+  // Sanitize specific fields to match DB types
+  const p_male = toIntOrNull(merged.male);
+  const p_female = toIntOrNull(merged.female);
+
+  // Use merged values, defaulting to null if still undefined/null
+  const params = [
+    merged.name ?? null,
+    merged.mobile ?? null,
+    p_male,
+    p_female,
+    merged.district ?? null,
+    merged.taluka ?? null,
+    merged.panchayat ?? null,
+    merged.village ?? null,
+    id
+  ];
+
+  // Always update by membership_no since 'id' column does not exist
+  const query = `
+    UPDATE members 
+    SET name=$1, mobile=$2, male=$3, female=$4, district=$5, taluka=$6, panchayat=$7, village=$8
+    WHERE membership_no=$9 RETURNING *`;
+
+  const res = await pool.query(query, params);
+  return res.rows[0];
+};
+
+exports.delete = async (id) => {
+  await pool.query("DELETE FROM members WHERE membership_no = $1", [id]);
+  return true;
 };
 
 /**
@@ -28,18 +81,18 @@ exports.search = async (keyword) => {
  */
 exports.exportExcel = async (stream) => {
   const workbook = new ExcelJS.Workbook();
-  const sheet    = workbook.addWorksheet('Members');
+  const sheet = workbook.addWorksheet('Members');
 
   sheet.columns = [
     { header: 'Membership No.', key: 'membership_no', width: 15 },
-    { header: 'Name',           key: 'name',          width: 25 },
-    { header: 'Mobile',         key: 'mobile',        width: 12 },
-    { header: 'Male',           key: 'male',          width: 6 },
-    { header: 'Female',         key: 'female',        width: 6 },
-    { header: 'District',       key: 'district',      width: 15 },
-    { header: 'Taluka',         key: 'taluka',        width: 15 },
-    { header: 'Panchayat',      key: 'panchayat',     width: 15 },
-    { header: 'Village',        key: 'village',       width: 15 }
+    { header: 'Name', key: 'name', width: 25 },
+    { header: 'Mobile', key: 'mobile', width: 12 },
+    { header: 'Male', key: 'male', width: 6 },
+    { header: 'Female', key: 'female', width: 6 },
+    { header: 'District', key: 'district', width: 15 },
+    { header: 'Taluka', key: 'taluka', width: 15 },
+    { header: 'Panchayat', key: 'panchayat', width: 15 },
+    { header: 'Village', key: 'village', width: 15 }
   ];
 
   const client = await pool.connect();

@@ -1,13 +1,13 @@
 const db = require('../config/db');
 
 /* ─────────────── READ ─────────────── */
-exports.getAll        = () =>           // ←  NEW
-  db.query('SELECT * FROM candidates ORDER BY name');
+exports.getAll = () =>
+  db.query('SELECT * FROM candidates WHERE is_matched = false ORDER BY name');
 
 exports.getAllByGender = gender =>
-  db.query('SELECT * FROM candidates WHERE gender = $1 ORDER BY name', [gender]);
+  db.query('SELECT * FROM candidates WHERE gender = $1 AND is_matched = false ORDER BY name', [gender]);
 
-exports.getById        = id =>
+exports.getById = id =>
   db.query('SELECT * FROM candidates WHERE id = $1', [id]);
 
 /* ─────────────── CREATE ────────────── */
@@ -26,8 +26,8 @@ exports.createCandidate = data => {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
      RETURNING *`,
     [name, gender, dob, age, height, bloodGroup, gotra, bansha, education,
-     technicalEducation, professionalEducation, occupation, father, mother,
-     address, phone, email, photo]
+      technicalEducation, professionalEducation, occupation, father, mother,
+      address, phone, email, photo]
   );
 };
 
@@ -48,8 +48,18 @@ exports.updateCandidate = (id, data) => {   // ←  RENAMED to match controller
      WHERE id=$19
      RETURNING *`,
     [name, gender, dob, age, height, bloodGroup, gotra, bansha, education,
-     technicalEducation, professionalEducation, occupation, father, mother,
-     address, phone, email, photo, id]
+      technicalEducation, professionalEducation, occupation, father, mother,
+      address, phone, email, photo, id]
+  );
+};
+
+exports.markMatched = (id, partnerName, partnerGender) => {
+  return db.query(
+    `UPDATE candidates 
+     SET is_matched = true, matched_partner_name = $1, matched_partner_gender = $2
+     WHERE id = $3
+     RETURNING *`,
+    [partnerName, partnerGender, id]
   );
 };
 

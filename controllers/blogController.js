@@ -10,6 +10,19 @@ exports.getAll = async (req, res) => {
   }
 };
 
+exports.getOne = async (req, res) => {
+  try {
+    const { rows } = await Post.getOne(req.params.id);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Get Post Error:', err);
+    res.status(500).json({ error: 'Failed to fetch post' });
+  }
+};
+
 exports.create = async (req, res) => {
   try {
     const { title, content } = req.body;
@@ -18,6 +31,20 @@ exports.create = async (req, res) => {
   } catch (err) {
     console.error('Create Post Error:', err);
     res.status(500).json({ error: 'Failed to create post' });
+  }
+};
+
+exports.update = async (req, res) => {
+  try {
+    const { title, content } = req.body;
+    const { rows } = await Post.update(req.params.id, { title, content });
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Update Post Error:', err);
+    res.status(500).json({ error: 'Failed to update post' });
   }
 };
 

@@ -2,21 +2,77 @@ const model = require('../models/memberModel');
 const ExcelJS = require('exceljs');
 const fs = require('node:fs/promises');
 
+// Helper to mask mobile number (show last 4 digits only)
+const maskMobile = (mobile) => {
+  if (!mobile) return mobile;
+  const s = mobile.toString();
+  // If undefined/null/empty handled above. If too short, mask all.
+  if (s.length <= 4) return '******';
+  return '******' + s.slice(-4);
+};
+
+// Helper: mask result rows
+const maskRows = (rows) => {
+  return rows.map(r => ({
+    ...r,
+    mobile: maskMobile(r.mobile)
+  }));
+};
+
 exports.getAll = async (req, res) => {
+  // Check if search query parameter exists
+  if (req.query.search) {
+    const data = await model.search(req.query.search);
+    return res.json(maskRows(data.rows));
+  }
+
   const data = await model.getAll();
-  res.json(data.rows);
+  res.json(maskRows(data.rows));
 };
 
 exports.getByLocation = async (req, res) => {
   const { district, taluka, panchayat } = req.query;
   const data = await model.getAllByLocation(district, taluka, panchayat);
-  res.json(data.rows);
+  res.json(maskRows(data.rows));
 };
 
 exports.search = async (req, res) => {
   const { keyword } = req.query;
   const data = await model.search(keyword);
-  res.json(data.rows);
+  res.json(maskRows(data.rows));
+};
+
+exports.getOne = async (req, res) => {
+  try {
+    const member = await model.getOne(req.params.id);
+    if (!member) {
+      return res.status(404).json({ message: 'Member not found' });
+    }
+    res.json(member);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.update = async (req, res) => {
+  try {
+    const member = await model.update(req.params.id, req.body);
+    if (!member) {
+      return res.status(404).json({ message: 'Member not found' });
+    }
+    res.json(member);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.delete = async (req, res) => {
+  try {
+    await model.delete(req.params.id);
+    res.json({ success: true, message: 'Member deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 exports.exportExcel = async (req, res) => {
@@ -58,14 +114,14 @@ exports.importExcel = async (req, res) => {
       if (i === 1) return; // skip header
       rows.push({
         membership_no: row.getCell(1).value?.toString().trim(),
-        name:          row.getCell(2).value?.toString().trim(),
-        mobile:        row.getCell(3).value?.toString().trim(),
-        male:          row.getCell(4).value ?? null,
-        female:        row.getCell(5).value ?? null,
-        district:      row.getCell(6).value?.toString().trim(),
-        taluka:        row.getCell(7).value?.toString().trim(),
-        panchayat:     row.getCell(8).value?.toString().trim(),
-        village:       row.getCell(9).value?.toString().trim()
+        name: row.getCell(2).value?.toString().trim(),
+        mobile: row.getCell(3).value?.toString().trim(),
+        male: row.getCell(4).value ?? null,
+        female: row.getCell(5).value ?? null,
+        district: row.getCell(6).value?.toString().trim(),
+        taluka: row.getCell(7).value?.toString().trim(),
+        panchayat: row.getCell(8).value?.toString().trim(),
+        village: row.getCell(9).value?.toString().trim()
       });
     });
 
@@ -75,7 +131,7 @@ exports.importExcel = async (req, res) => {
     console.error('Excel import error:', err);
     res.status(500).json({ message: 'Failed to import members' });
   } finally {
-    await fs.unlink(filePath).catch(() => {});
+    await fs.unlink(filePath).catch(() => { });
   }
 };
 
@@ -96,14 +152,14 @@ exports.importRows = async (req, res) => {
       const rowNum = i + 2;
       const rec = {
         membership_no: (r.membership_no ?? '').toString().trim(),
-        name:          (r.name ?? '').toString().trim(),
-        mobile:        toDigits(r.mobile),
-        male:          (r.male === '' || r.male == null || isNaN(Number(r.male))) ? null : Number(r.male),
-        female:        (r.female === '' || r.female == null || isNaN(Number(r.female))) ? null : Number(r.female),
-        district:      (r.district ?? '').toString().trim(),
-        taluka:        (r.taluka ?? '').toString().trim(),
-        panchayat:     (r.panchayat ?? '').toString().trim(),
-        village:       (r.village ?? '').toString().trim(),
+        name: (r.name ?? '').toString().trim(),
+        mobile: toDigits(r.mobile),
+        male: (r.male === '' || r.male == null || isNaN(Number(r.male))) ? null : Number(r.male),
+        female: (r.female === '' || r.female == null || isNaN(Number(r.female))) ? null : Number(r.female),
+        district: (r.district ?? '').toString().trim(),
+        taluka: (r.taluka ?? '').toString().trim(),
+        panchayat: (r.panchayat ?? '').toString().trim(),
+        village: (r.village ?? '').toString().trim(),
       };
 
       // Mandatory fields
@@ -118,8 +174,8 @@ exports.importRows = async (req, res) => {
 
       // Length checks: skip rows with overlong membership_no, truncate mobile
       if (rec.membership_no.length > MAXLEN.membership_no) {
-      warnings.push({ row: rowNum, field: 'membership_no', reason: `length>${MAXLEN.membership_no}`, value: rec.membership_no });
-      return null; // skip entirely, since membership_no must be valid
+        warnings.push({ row: rowNum, field: 'membership_no', reason: `length>${MAXLEN.membership_no}`, value: rec.membership_no });
+        return null; // skip entirely, since membership_no must be valid
       }
       if (rec.mobile && rec.mobile.length > MAXLEN.mobile) {
         warnings.push({ row: rowNum, field: 'mobile', reason: `length>${MAXLEN.mobile}`, value: rec.mobile });
@@ -128,7 +184,7 @@ exports.importRows = async (req, res) => {
 
       return { rec, rowNum };
     })
-    .filter(Boolean);
+      .filter(Boolean);
 
     // Deduplicate by membership_no
     const deduped = [];

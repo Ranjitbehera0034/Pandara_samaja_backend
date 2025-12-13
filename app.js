@@ -1,8 +1,8 @@
 // server.js  (or app.js)
 const express = require('express');
-const cors    = require('cors');
+const cors = require('cors');
 const bodyParser = require('body-parser');
-const multer      = require('multer');
+const multer = require('multer');
 require('dotenv').config();
 
 const app = express();
@@ -10,20 +10,33 @@ const app = express();
 /* ─── 1. Allowed-origin lists ──────────────────────────────── */
 const allowedOriginsDev = [
   'http://localhost:5000',
-  'http://127.0.0.1:5000'
+  'http://127.0.0.1:5000',
+  'http://localhost:5500',
+  'http://127.0.0.1:5500',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:8000',
+  'http://127.0.0.1:8000',
+  'http://localhost:8080',
+  'http://127.0.0.1:8080'
 ];
 
-/*  add both bare + www versions of the front-end,                                       
+/*  add both bare + www versions of the front-end,
     and keep the Render domain in case you test directly */
 const allowedOriginsProd = [
   'https://nikhilaodishapandarasamaja.in',
   'https://www.nikhilaodishapandarasamaja.in',
-  'https://pandara-samaja-backend.onrender.com'
+  'https://pandara-samaja-backend.onrender.com',
+  // Allow local frontend in production mode for testing
+  'http://localhost:8000',
+  'http://127.0.0.1:8000',
+  'http://localhost:8080',
+  'http://127.0.0.1:8080'
 ];
 
 const allowedOrigins =
   process.env.NODE_ENV === 'production' ? allowedOriginsProd
-                                        : allowedOriginsDev;
+    : allowedOriginsDev;
 
 /* ─── 2. CORS middleware ───────────────────────────────────── */
 app.use(
@@ -52,11 +65,40 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
 /* ─── 3. Upload folder + multer ───────────────────────────── */
 const upload = multer({ storage: multer.memoryStorage() });
 
+app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/candidates', require('./routes/candidateRoutes')(upload));
-app.use('/api/members',    require('./routes/memberRoutes'));
+app.use('/api/members', require('./routes/memberRoutes'));
 app.use('/api/posts', require('./routes/blogRoutes'));
 
 
 /* ─── 4. Start server ─────────────────────────────────────── */
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+const server = app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`📍 API Base URL: http://localhost:${PORT}/api`);
+  console.log(`🔐 Default admin credentials: admin / admin123`);
+});
+
+// Handle server errors
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ ERROR: Port ${PORT} is already in use!`);
+    console.error(`💡 Solution: Kill the existing process or use a different port:`);
+    console.error(`   - Kill existing: lsof -ti:${PORT} | xargs kill`);
+    console.error(`   - Use different port: PORT=5001 npm start`);
+    process.exit(1);
+  } else {
+    console.error('❌ Server error:', error);
+    process.exit(1);
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('👋 SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
