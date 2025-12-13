@@ -1,6 +1,7 @@
 // routes/candidateRoutes.js
-const express    = require('express');
+const express = require('express');
 const controller = require('../controllers/candidateController');
+const { requireAuth } = require('../middleware/auth');
 
 /**
  * Export a function so app.js can inject the configured
@@ -12,13 +13,14 @@ const controller = require('../controllers/candidateController');
 module.exports = (upload) => {
   const router = express.Router();
 
-  router.get('/',        controller.getAll);
-  router.get('/:id',     controller.getOne);
+  // Public routes
+  router.get('/', controller.getAll);
+  router.get('/:id', controller.getOne);
 
-  // Use the caller-supplied upload middleware
-  router.post(   '/',    upload.single('photo'), controller.create);
-  router.put( '/:id',    upload.single('photo'), controller.update);
-
-  router.delete('/:id',  controller.remove);
+  // Protected routes (require authentication)
+  router.post('/', requireAuth, upload.single('photo'), controller.create);
+  router.put('/:id', requireAuth, upload.single('photo'), controller.update);
+  router.put('/:id/match', requireAuth, controller.markMatched);
+  router.delete('/:id', requireAuth, controller.remove);
   return router;
 };
