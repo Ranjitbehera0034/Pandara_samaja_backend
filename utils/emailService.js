@@ -2,24 +2,14 @@ const nodemailer = require('nodemailer');
 
 // 1. Configure the transporter
 // In production, these should be environment variables
-const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
-const useSSL = smtpPort === 465;
-
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: smtpPort,
-    secure: useSSL, // true for 465, false for other ports
+    port: process.env.SMTP_PORT || 587,
+    secure: false, // true for 465, false for other ports
     auth: {
         user: process.env.SMTP_USER, // Your email
         pass: process.env.SMTP_PASS  // Your email password or app password
-    },
-    // Add timeout and connection settings for Render
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-    // Enable debug logging in development
-    debug: process.env.NODE_ENV !== 'production',
-    logger: process.env.NODE_ENV !== 'production'
+    }
 });
 
 /**
