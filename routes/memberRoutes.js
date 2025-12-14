@@ -4,13 +4,13 @@ const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
 
 const memberController = require('../controllers/memberController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Public routes
-router.get('/search', memberController.search);
-router.get('/', memberController.getAll);
+// Public routes (with optional auth for admin check)
+router.get('/search', optionalAuth, memberController.search);
+router.get('/', optionalAuth, memberController.getAll);
 
 // Export endpoint (can be public or protected based on requirements)
 router.get('/export', memberController.exportExcel);
@@ -22,6 +22,6 @@ router.put('/:id', requireAuth, memberController.update);
 router.delete('/:id', requireAuth, memberController.delete);
 
 // Public routes (must be last to avoid conflict with specific paths)
-router.get('/:id', memberController.getOne);
+router.get('/:id', optionalAuth, memberController.getOne);
 
 module.exports = router;
