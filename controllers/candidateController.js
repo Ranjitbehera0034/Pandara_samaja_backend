@@ -55,13 +55,26 @@ exports.update = async (req, res) => {
   try {
     const id = req.params.id;
     const data = req.body;
+
+    // Fetch existing candidate to preserve photo (and potentially other fields)
+    const existingResult = await model.getById(id);
+    let existingPhoto = null;
+
+    if (existingResult.rows.length > 0) {
+      existingPhoto = existingResult.rows[0].photo;
+    }
+
     if (req.file) {
       data.photo = await gDrive.uploadFile(req.file); // public URL
-      // file deletion handled by uploadFile
+    } else if (!data.photo && existingPhoto) {
+      // If no new file AND no new photo URL provided, keep the old one
+      data.photo = existingPhoto;
     }
+
     const result = await model.updateCandidate(id, data);
     res.json(result.rows[0]);
   } catch (err) {
+    console.error("Update candidate error:", err);
     res.status(500).json({ error: "Failed to update candidate" });
   }
 };
