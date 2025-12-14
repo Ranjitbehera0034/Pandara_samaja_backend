@@ -77,7 +77,7 @@ const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`📍 API Base URL: http://localhost:${PORT}/api`);
-  console.log(`🔐 Default admin credentials: admin / admin123`);
+  console.log(`⚠️  SECURITY: Change default admin password immediately!`);
 });
 
 // Handle server errors
