@@ -77,5 +77,22 @@ const requireAuthAdmin = [requireAuth, requireAdmin];
 module.exports = {
   requireAuth,
   requireAdmin,
-  requireAuthAdmin
+  requireAuthAdmin,
+  optionalAuth: (req, res, next) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = {
+          id: decoded.id,
+          username: decoded.username,
+          role: decoded.role
+        };
+      }
+    } catch (ignore) {
+      // Ignore errors for optional auth
+    }
+    next();
+  }
 };
