@@ -12,7 +12,8 @@ const maskMobile = (mobile) => {
 };
 
 // Helper: mask result rows
-const maskRows = (rows) => {
+const maskRows = (rows, isAdmin) => {
+  if (isAdmin) return rows;
   return rows.map(r => ({
     ...r,
     mobile: maskMobile(r.mobile)
@@ -23,23 +24,24 @@ exports.getAll = async (req, res) => {
   // Check if search query parameter exists
   if (req.query.search) {
     const data = await model.search(req.query.search);
-    return res.json(maskRows(data.rows));
+    return res.json(maskRows(data.rows, req.user?.role === 'admin'));
   }
 
   const data = await model.getAll();
-  res.json(maskRows(data.rows));
+  console.log('DEBUG: getAll user:', req.user, 'isAdmin:', req.user?.role === 'admin');
+  res.json(maskRows(data.rows, req.user?.role === 'admin'));
 };
 
 exports.getByLocation = async (req, res) => {
   const { district, taluka, panchayat } = req.query;
   const data = await model.getAllByLocation(district, taluka, panchayat);
-  res.json(maskRows(data.rows));
+  res.json(maskRows(data.rows, req.user?.role === 'admin'));
 };
 
 exports.search = async (req, res) => {
   const { keyword } = req.query;
   const data = await model.search(keyword);
-  res.json(maskRows(data.rows));
+  res.json(maskRows(data.rows, req.user?.role === 'admin'));
 };
 
 exports.getOne = async (req, res) => {
@@ -48,6 +50,12 @@ exports.getOne = async (req, res) => {
     if (!member) {
       return res.status(404).json({ message: 'Member not found' });
     }
+
+    // Mask if not admin
+    if (req.user?.role !== 'admin') {
+      member.mobile = maskMobile(member.mobile);
+    }
+
     res.json(member);
   } catch (error) {
     res.status(500).json({ message: error.message });
