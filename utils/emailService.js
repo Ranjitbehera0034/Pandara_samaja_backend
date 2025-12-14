@@ -1,16 +1,28 @@
 const nodemailer = require('nodemailer');
 
-// 1. Configure the transporter
-// In production, these should be environment variables
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
-    secure: false, // true for 465, false for other ports
-    auth: {
-        user: process.env.SMTP_USER, // Your email
-        pass: process.env.SMTP_PASS  // Your email password or app password
-    }
-});
+// Configure SMTP transporter (optional)
+const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
+const useSSL = smtpPort === 465;
+
+let transporter = null;
+
+// Only create transporter if SMTP credentials are provided
+if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: smtpPort,
+        secure: useSSL,
+        auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+        },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+        debug: process.env.NODE_ENV !== 'production',
+        logger: process.env.NODE_ENV !== 'production'
+    });
+}
 
 /**
  * Send a security alert email when an admin logs in
@@ -18,16 +30,26 @@ const transporter = nodemailer.createTransport({
  * @param {Object} req - The express request object (to get IP, user agent)
  */
 const sendLoginAlert = async (user, req) => {
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-        console.warn('⚠️ SMTP credentials not found. Skipping email alert.');
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    const timestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+    // Log to console (always happens)
+    console.log('🔐 ADMIN LOGIN DETECTED:');
+    console.log(`   Username: ${user.username}`);
+    console.log(`   Role: ${user.role}`);
+    console.log(`   IP: ${clientIp}`);
+    console.log(`   Time: ${timestamp}`);
+    console.log(`   User Agent: ${userAgent}`);
+
+    // If no email configured, just log and return
+    if (!transporter) {
+        console.log('ℹ️  Email notifications not configured (optional)');
+        console.log('   To enable: Add SMTP credentials to .env file');
         return;
     }
 
-    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    const userAgent = req.headers['user-agent'];
-    const timestamp = new Date().toLocaleString();
-
-    const recipient = process.env.ALERT_EMAIL_TO || 'admin@nikhilaodishapandarasamaja.in'; // Default or from env
+    const recipient = process.env.ALERT_EMAIL_TO || 'admin@nikhilaodishapandarasamaja.in';
     const sender = process.env.ALERT_EMAIL_FROM || process.env.SMTP_USER;
 
     const subject = `🚨 Security Alert: Admin Login Detected - ${user.username}`;
@@ -65,7 +87,7 @@ const sendLoginAlert = async (user, req) => {
         </table>
 
         <div style="margin-top: 20px; padding: 10px; background-color: #f9f9f9; border-left: 4px solid #f0ad4e;">
-          <p style="margin: 0; font-size: 0.9em;">If this was you, you can ignore this email. If you did not authorize this login, please contact support immediately/change your password.</p>
+          <p style="margin: 0; font-size: 0.9em;">If this was you, you can ignore this email. If you did not authorize this login, please contact support immediately.</p>
         </div>
       </div>
        <div style="background-color: #f5f5f5; color: #777; padding: 10px; text-align: center; font-size: 0.8em;">
@@ -75,15 +97,18 @@ const sendLoginAlert = async (user, req) => {
   `;
 
     try {
+        console.log('📧 Attempting to send email notification...');
         const info = await transporter.sendMail({
             from: `"Security Alert" <${sender}>`,
             to: recipient,
             subject: subject,
             html: html
         });
-        console.log('✅ Security alert email sent:', info.messageId);
+        console.log('✅ Email notification sent successfully:', info.messageId);
     } catch (error) {
-        console.error('❌ Failed to send security alert email:', error);
+        console.error('⚠️  Failed to send email notification (non-critical):', error.message);
+        console.log('ℹ️  Login was successful, but email notification failed');
+        console.log('   This is optional - the system continues to work normally');
     }
 };
 
