@@ -10,5 +10,6 @@ router.post('/register', AuthController.register); // Can be protected later
 // Protected routes
 router.get('/verify', requireAuth, AuthController.verifyToken);
 router.get('/me', requireAuth, AuthController.getCurrentUser);
+router.post('/notify-login', requireAuth, AuthController.notifyLogin);
 
 module.exports = router;

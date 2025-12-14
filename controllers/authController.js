@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const UserModel = require('../models/userModel');
+const { sendLoginAlert } = require('../utils/emailService');
 
 // JWT secret key - should be in environment variables
 if (!process.env.JWT_SECRET) {
@@ -17,16 +18,8 @@ class AuthController {
     try {
       const { username, password } = req.body;
 
-      // DEBUG LOGGING - Remove after fixing the issue
-      console.log('🔍 LOGIN ATTEMPT:');
-      console.log('  - Username:', username ? `"${username}"` : 'undefined/empty');
-      console.log('  - Password:', password ? `"${password.substring(0, 3)}***" (length: ${password.length})` : 'undefined/empty');
-      console.log('  - Username has spaces?', username !== username?.trim());
-      console.log('  - Full request body:', JSON.stringify(req.body));
-
       // Validate input
       if (!username || !password) {
-        console.log('❌ Validation failed: missing username or password');
         return res.status(400).json({
           success: false,
           message: 'Username and password are required'
@@ -37,7 +30,6 @@ class AuthController {
       const user = await UserModel.findByUsername(username);
       // Security: Use generic error message to prevent username enumeration
       if (!user) {
-        console.log('❌ User not found:', username);
         return res.status(401).json({
           success: false,
           message: 'Invalid credentials'
@@ -47,7 +39,6 @@ class AuthController {
       // Verify password
       const isValidPassword = await UserModel.verifyPassword(password, user.password_hash);
       if (!isValidPassword) {
-        console.log('❌ Invalid password for user:', username);
         return res.status(401).json({
           success: false,
           message: 'Invalid credentials'
@@ -182,6 +173,41 @@ class AuthController {
       res.status(500).json({
         success: false,
         message: 'Internal server error'
+      });
+    }
+  }
+
+  // Notify login - called by UI after successful login to send email alert
+  static async notifyLogin(req, res) {
+    try {
+      // This endpoint should be called with the user info and token
+      const user = req.user; // From auth middleware
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+      }
+
+      // Only send alerts for admin logins
+      if (user.role === 'admin') {
+        await sendLoginAlert(user, req);
+        return res.json({
+          success: true,
+          message: 'Login notification sent'
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'No notification required for non-admin users'
+      });
+    } catch (error) {
+      console.error('Notify login error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to send notification'
       });
     }
   }
