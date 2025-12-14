@@ -21,6 +21,7 @@
     "jsonwebtoken": "^9.0.2",
     "mime-types": "^3.0.1",
     "multer": "^2.0.2",
+    "nodemailer": "^7.0.11",
     "pg": "^8.16.0",
     "pg-cursor": "^2.15.3",
     "pg-format": "^1.0.4"

@@ -28,7 +28,6 @@ exports.getAll = async (req, res) => {
   }
 
   const data = await model.getAll();
-  console.log('DEBUG: getAll user:', req.user, 'isAdmin:', req.user?.role === 'admin');
   res.json(maskRows(data.rows, req.user?.role === 'admin'));
 };
 
