@@ -42,6 +42,12 @@ exports.create = async (data) => {
   // Auto-generate membership_no if not provided
   const membershipNo = data.membership_no?.trim() || await generateMembershipNo();
 
+  // Parse family_members: accept JSON string or array
+  let familyMembers = data.family_members ?? [];
+  if (typeof familyMembers === 'string') {
+    try { familyMembers = JSON.parse(familyMembers); } catch { familyMembers = []; }
+  }
+
   const params = [
     membershipNo,
     data.name ?? null,
@@ -51,12 +57,15 @@ exports.create = async (data) => {
     data.district ?? null,
     data.taluka ?? null,
     data.panchayat ?? null,
-    data.village ?? null
+    data.village ?? null,
+    data.aadhar_no ?? null,
+    JSON.stringify(familyMembers),
+    data.address ?? null
   ];
 
   const query = `
-    INSERT INTO members (membership_no, name, mobile, male, female, district, taluka, panchayat, village)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    INSERT INTO members (membership_no, name, mobile, male, female, district, taluka, panchayat, village, aadhar_no, family_members, address)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
     RETURNING *`;
 
   const res = await pool.query(query, params);
@@ -107,6 +116,12 @@ exports.update = async (id, data) => {
   const p_male = toIntOrNull(merged.male);
   const p_female = toIntOrNull(merged.female);
 
+  // Parse family_members: accept JSON string or array
+  let familyMembers = merged.family_members ?? [];
+  if (typeof familyMembers === 'string') {
+    try { familyMembers = JSON.parse(familyMembers); } catch { familyMembers = []; }
+  }
+
   // Use merged values, defaulting to null if still undefined/null
   const params = [
     merged.name ?? null,
@@ -117,14 +132,18 @@ exports.update = async (id, data) => {
     merged.taluka ?? null,
     merged.panchayat ?? null,
     merged.village ?? null,
+    merged.aadhar_no ?? null,
+    JSON.stringify(familyMembers),
+    merged.address ?? null,
     id
   ];
 
   // Always update by membership_no since 'id' column does not exist
   const query = `
     UPDATE members 
-    SET name=$1, mobile=$2, male=$3, female=$4, district=$5, taluka=$6, panchayat=$7, village=$8
-    WHERE membership_no=$9 RETURNING *`;
+    SET name=$1, mobile=$2, male=$3, female=$4, district=$5, taluka=$6, panchayat=$7, village=$8,
+        aadhar_no=$9, family_members=$10::jsonb, address=$11
+    WHERE membership_no=$12 RETURNING *`;
 
   const res = await pool.query(query, params);
   return res.rows[0];
@@ -152,14 +171,18 @@ exports.exportExcel = async (stream) => {
     { header: 'District', key: 'district', width: 15 },
     { header: 'Taluka', key: 'taluka', width: 15 },
     { header: 'Panchayat', key: 'panchayat', width: 15 },
-    { header: 'Village', key: 'village', width: 15 }
+    { header: 'Village', key: 'village', width: 15 },
+    { header: 'Aadhar No.', key: 'aadhar_no', width: 15 },
+    { header: 'Family Members', key: 'family_members_text', width: 40 },
+    { header: 'Address', key: 'address', width: 30 }
   ];
 
   const client = await pool.connect();
   try {
     const cursor = client.query(new Cursor(`
       SELECT membership_no, name, mobile, male, female,
-             district, taluka, panchayat, village
+             district, taluka, panchayat, village,
+             aadhar_no, family_members, address
       FROM   public.members
       ORDER  BY district, taluka, panchayat, name
     `));
@@ -167,7 +190,14 @@ exports.exportExcel = async (stream) => {
     const batchSize = 500;
     let rows;
     while ((rows = await cursor.read(batchSize)).length) {
-      sheet.addRows(rows);
+      // Convert family_members JSONB to readable text for Excel
+      const mappedRows = rows.map(r => ({
+        ...r,
+        family_members_text: Array.isArray(r.family_members)
+          ? r.family_members.map(fm => `${fm.name || ''} (${fm.relation || ''}, Age: ${fm.age || ''})`).join('; ')
+          : ''
+      }));
+      sheet.addRows(mappedRows);
     }
     await cursor.close();
   } finally {
@@ -185,17 +215,26 @@ exports.exportExcel = async (stream) => {
 exports.bulkUpsertMembers = async (rows) => {
   if (!rows.length) return 0;
 
-  const vals = rows.map(r => [
-    r.membership_no,
-    r.name,
-    r.mobile,
-    r.male,
-    r.female,
-    r.district,
-    r.taluka,
-    r.panchayat,
-    r.village
-  ]);
+  const vals = rows.map(r => {
+    let fm = r.family_members ?? [];
+    if (typeof fm === 'string') {
+      try { fm = JSON.parse(fm); } catch { fm = []; }
+    }
+    return [
+      r.membership_no,
+      r.name,
+      r.mobile,
+      r.male,
+      r.female,
+      r.district,
+      r.taluka,
+      r.panchayat,
+      r.village,
+      r.aadhar_no ?? null,
+      JSON.stringify(fm),
+      r.address ?? null
+    ];
+  });
 
   const client = await pool.connect();
   try {
@@ -204,17 +243,21 @@ exports.bulkUpsertMembers = async (rows) => {
     const sql = format(`
       INSERT INTO public.members
         (membership_no, name, mobile, male, female,
-         district, taluka, panchayat, village)
+         district, taluka, panchayat, village,
+         aadhar_no, family_members, address)
       VALUES %L
       ON CONFLICT ON CONSTRAINT members_membership_no_key DO UPDATE
-        SET name      = EXCLUDED.name,
-            mobile    = EXCLUDED.mobile,
-            male      = EXCLUDED.male,
-            female    = EXCLUDED.female,
-            district  = EXCLUDED.district,
-            taluka    = EXCLUDED.taluka,
-            panchayat = EXCLUDED.panchayat,
-            village   = EXCLUDED.village;
+        SET name           = EXCLUDED.name,
+            mobile         = EXCLUDED.mobile,
+            male           = EXCLUDED.male,
+            female         = EXCLUDED.female,
+            district       = EXCLUDED.district,
+            taluka         = EXCLUDED.taluka,
+            panchayat      = EXCLUDED.panchayat,
+            village        = EXCLUDED.village,
+            aadhar_no      = EXCLUDED.aadhar_no,
+            family_members = EXCLUDED.family_members::jsonb,
+            address        = EXCLUDED.address;
     `, vals);
 
     await client.query(sql);

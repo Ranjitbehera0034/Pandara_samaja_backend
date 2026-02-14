@@ -11,12 +11,21 @@ const maskMobile = (mobile) => {
   return '******' + s.slice(-4);
 };
 
+// Helper to mask Aadhaar number (show last 4 digits only)
+const maskAadhar = (aadhar) => {
+  if (!aadhar) return aadhar;
+  const s = aadhar.toString();
+  if (s.length <= 4) return '********';
+  return '********' + s.slice(-4);
+};
+
 // Helper: mask result rows
 const maskRows = (rows, isAdmin) => {
   if (isAdmin) return rows;
   return rows.map(r => ({
     ...r,
-    mobile: maskMobile(r.mobile)
+    mobile: maskMobile(r.mobile),
+    aadhar_no: maskAadhar(r.aadhar_no)
   }));
 };
 
@@ -71,6 +80,7 @@ exports.getOne = async (req, res) => {
     // Mask if not admin
     if (req.user?.role !== 'admin') {
       member.mobile = maskMobile(member.mobile);
+      member.aadhar_no = maskAadhar(member.aadhar_no);
     }
 
     res.json(member);
@@ -146,7 +156,10 @@ exports.importExcel = async (req, res) => {
         district: row.getCell(6).value?.toString().trim(),
         taluka: row.getCell(7).value?.toString().trim(),
         panchayat: row.getCell(8).value?.toString().trim(),
-        village: row.getCell(9).value?.toString().trim()
+        village: row.getCell(9).value?.toString().trim(),
+        aadhar_no: row.getCell(10).value?.toString().trim() ?? null,
+        family_members: [],  // Excel import doesn't parse family members from text
+        address: row.getCell(12).value?.toString().trim() ?? null
       });
     });
 
@@ -185,6 +198,9 @@ exports.importRows = async (req, res) => {
         taluka: (r.taluka ?? '').toString().trim(),
         panchayat: (r.panchayat ?? '').toString().trim(),
         village: (r.village ?? '').toString().trim(),
+        aadhar_no: (r.aadhar_no ?? '').toString().trim() || null,
+        family_members: r.family_members ?? [],
+        address: (r.address ?? '').toString().trim() || null,
       };
 
       // Mandatory fields
