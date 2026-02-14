@@ -20,6 +20,24 @@ const maskRows = (rows, isAdmin) => {
   }));
 };
 
+/**
+ * Create a new member
+ * Auto-generates membership_no if not provided
+ */
+exports.create = async (req, res) => {
+  try {
+    const member = await model.create(req.body);
+    res.status(201).json(member);
+  } catch (error) {
+    // Handle unique constraint violation for membership_no
+    if (error.code === '23505' && error.constraint === 'members_membership_no_key') {
+      return res.status(400).json({ message: 'Membership number already exists' });
+    }
+    console.error('Error creating member:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.getAll = async (req, res) => {
   // Check if search query parameter exists
   if (req.query.search) {
