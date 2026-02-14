@@ -3,6 +3,66 @@ const ExcelJS = require('exceljs');
 const Cursor = require('pg-cursor');
 const format = require('pg-format');
 
+/**
+ * Generate a unique membership number
+ * Format: MEM + 7 random digits (e.g., MEM1234567)
+ */
+const generateMembershipNo = async () => {
+  let membershipNo;
+  let exists = true;
+
+  while (exists) {
+    // Generate random 7-digit number
+    const randomNum = Math.floor(1000000 + Math.random() * 9000000);
+    membershipNo = `MEM${randomNum}`;
+
+    // Check if it already exists
+    const result = await pool.query(
+      "SELECT 1 FROM members WHERE membership_no = $1",
+      [membershipNo]
+    );
+    exists = result.rows.length > 0;
+  }
+
+  return membershipNo;
+};
+
+/**
+ * Create a new member
+ * Auto-generates membership_no if not provided
+ */
+exports.create = async (data) => {
+  // Helper to sanitize numeric fields
+  const toIntOrNull = (val) => {
+    if (val === null || val === undefined || val === '') return null;
+    const n = Number(val);
+    return isNaN(n) ? null : n;
+  };
+
+  // Auto-generate membership_no if not provided
+  const membershipNo = data.membership_no?.trim() || await generateMembershipNo();
+
+  const params = [
+    membershipNo,
+    data.name ?? null,
+    data.mobile ?? null,
+    toIntOrNull(data.male),
+    toIntOrNull(data.female),
+    data.district ?? null,
+    data.taluka ?? null,
+    data.panchayat ?? null,
+    data.village ?? null
+  ];
+
+  const query = `
+    INSERT INTO members (membership_no, name, mobile, male, female, district, taluka, panchayat, village)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    RETURNING *`;
+
+  const res = await pool.query(query, params);
+  return res.rows[0];
+};
+
 exports.getAll = async () => {
   return pool.query("SELECT * FROM members ORDER BY district, taluka, panchayat, name");
 };
