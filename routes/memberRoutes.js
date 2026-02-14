@@ -16,6 +16,7 @@ router.get('/', optionalAuth, memberController.getAll);
 router.get('/export', memberController.exportExcel);
 
 // Protected routes (require authentication)
+router.post('/', requireAuth, memberController.create);  // Create single member
 router.post('/import', requireAuth, upload.single('file'), memberController.importExcel);
 router.post('/import-rows', requireAuth, memberController.importRows);
 router.put('/:id', requireAuth, memberController.update);
