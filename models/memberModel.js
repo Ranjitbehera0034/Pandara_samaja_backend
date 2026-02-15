@@ -51,6 +51,7 @@ exports.create = async (data) => {
   const params = [
     membershipNo,
     data.name ?? null,
+    data.head_gender ?? null,
     data.mobile ?? null,
     toIntOrNull(data.male),
     toIntOrNull(data.female),
@@ -64,8 +65,8 @@ exports.create = async (data) => {
   ];
 
   const query = `
-    INSERT INTO members (membership_no, name, mobile, male, female, district, taluka, panchayat, village, aadhar_no, family_members, address)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+    INSERT INTO members (membership_no, name, head_gender, mobile, male, female, district, taluka, panchayat, village, aadhar_no, family_members, address)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13)
     RETURNING *`;
 
   const res = await pool.query(query, params);
@@ -125,6 +126,7 @@ exports.update = async (id, data) => {
   // Use merged values, defaulting to null if still undefined/null
   const params = [
     merged.name ?? null,
+    merged.head_gender ?? null,
     merged.mobile ?? null,
     p_male,
     p_female,
@@ -141,9 +143,9 @@ exports.update = async (id, data) => {
   // Always update by membership_no since 'id' column does not exist
   const query = `
     UPDATE members 
-    SET name=$1, mobile=$2, male=$3, female=$4, district=$5, taluka=$6, panchayat=$7, village=$8,
-        aadhar_no=$9, family_members=$10::jsonb, address=$11
-    WHERE membership_no=$12 RETURNING *`;
+    SET name=$1, head_gender=$2, mobile=$3, male=$4, female=$5, district=$6, taluka=$7, panchayat=$8, village=$9,
+        aadhar_no=$10, family_members=$11::jsonb, address=$12
+    WHERE membership_no=$13 RETURNING *`;
 
   const res = await pool.query(query, params);
   return res.rows[0];
@@ -165,6 +167,7 @@ exports.exportExcel = async (stream) => {
   sheet.columns = [
     { header: 'Membership No.', key: 'membership_no', width: 15 },
     { header: 'Name', key: 'name', width: 25 },
+    { header: 'Head Gender', key: 'head_gender', width: 10 },
     { header: 'Mobile', key: 'mobile', width: 12 },
     { header: 'Male', key: 'male', width: 6 },
     { header: 'Female', key: 'female', width: 6 },
@@ -180,7 +183,7 @@ exports.exportExcel = async (stream) => {
   const client = await pool.connect();
   try {
     const cursor = client.query(new Cursor(`
-      SELECT membership_no, name, mobile, male, female,
+      SELECT membership_no, name, head_gender, mobile, male, female,
              district, taluka, panchayat, village,
              aadhar_no, family_members, address
       FROM   public.members
@@ -223,6 +226,7 @@ exports.bulkUpsertMembers = async (rows) => {
     return [
       r.membership_no,
       r.name,
+      r.head_gender ?? null,
       r.mobile,
       r.male,
       r.female,
@@ -242,12 +246,13 @@ exports.bulkUpsertMembers = async (rows) => {
 
     const sql = format(`
       INSERT INTO public.members
-        (membership_no, name, mobile, male, female,
+        (membership_no, name, head_gender, mobile, male, female,
          district, taluka, panchayat, village,
          aadhar_no, family_members, address)
       VALUES %L
       ON CONFLICT ON CONSTRAINT members_membership_no_key DO UPDATE
         SET name           = EXCLUDED.name,
+            head_gender    = EXCLUDED.head_gender,
             mobile         = EXCLUDED.mobile,
             male           = EXCLUDED.male,
             female         = EXCLUDED.female,
