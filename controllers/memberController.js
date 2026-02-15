@@ -150,16 +150,17 @@ exports.importExcel = async (req, res) => {
       rows.push({
         membership_no: row.getCell(1).value?.toString().trim(),
         name: row.getCell(2).value?.toString().trim(),
-        mobile: row.getCell(3).value?.toString().trim(),
-        male: row.getCell(4).value ?? null,
-        female: row.getCell(5).value ?? null,
-        district: row.getCell(6).value?.toString().trim(),
-        taluka: row.getCell(7).value?.toString().trim(),
-        panchayat: row.getCell(8).value?.toString().trim(),
-        village: row.getCell(9).value?.toString().trim(),
-        aadhar_no: row.getCell(10).value?.toString().trim() ?? null,
+        head_gender: row.getCell(3).value?.toString().trim() ?? null,
+        mobile: row.getCell(4).value?.toString().trim(),
+        male: row.getCell(5).value ?? null,
+        female: row.getCell(6).value ?? null,
+        district: row.getCell(7).value?.toString().trim(),
+        taluka: row.getCell(8).value?.toString().trim(),
+        panchayat: row.getCell(9).value?.toString().trim(),
+        village: row.getCell(10).value?.toString().trim(),
+        aadhar_no: row.getCell(11).value?.toString().trim() ?? null,
         family_members: [],  // Excel import doesn't parse family members from text
-        address: row.getCell(12).value?.toString().trim() ?? null
+        address: row.getCell(13).value?.toString().trim() ?? null
       });
     });
 
@@ -191,6 +192,7 @@ exports.importRows = async (req, res) => {
       const rec = {
         membership_no: (r.membership_no ?? '').toString().trim(),
         name: (r.name ?? '').toString().trim(),
+        head_gender: (r.head_gender ?? '').toString().trim() || null,
         mobile: toDigits(r.mobile),
         male: (r.male === '' || r.male == null || isNaN(Number(r.male))) ? null : Number(r.male),
         female: (r.female === '' || r.female == null || isNaN(Number(r.female))) ? null : Number(r.female),
