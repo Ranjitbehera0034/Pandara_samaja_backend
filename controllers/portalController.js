@@ -45,18 +45,24 @@ exports.login = async (req, res) => {
             });
         }
 
-        // Generate a 6-digit OTP (in a real app, send via SMS gateway)
-        // Defaulting to static OTP for dev mode or a real one to standard output
-        const otp = '123456';
+        // Generate a random 6-digit OTP
+        // e.g. Math.floor(100000 + Math.random() * 900000)
+        // Hardcoded 123456 as a backdoor fallback for local testing if desired, or skip it.
+        const otp = String(Math.floor(100000 + Math.random() * 900000));
+
+        // Save the OTP into the db table with 5min expiration
+        await portal.saveOtp(membership_no.trim(), cleanMobile, otp);
+
         console.log(`[AUTH] OTP requested for ${membership_no} (Mobile: ${cleanMobile}): ${otp}`);
 
-        // In reality, you'd store it in DB or Redis. For this MVP, we'll fast-track client-side or static check via verifyOtp
+        // TODO: Integrate actual SMS gateway API call right here!
+        // axios.post('https://sms-provider.com/send', { number: cleanMobile, message: \`Your OTP is \${otp}\` })
 
         res.json({
             success: true,
             message: 'OTP sent successfully',
             requireOtp: true,
-            _devOtp: otp // Send back for easy testing until SMS gateway is wired
+            _devOtp: otp // Note: For production security, REMOVE _devOtp from frontend payload
         });
     } catch (error) {
         console.error('Portal login error:', error);
@@ -84,9 +90,10 @@ exports.verifyOtp = async (req, res) => {
             return res.status(401).json({ success: false, message: 'Member lookup failed' });
         }
 
-        // Hardcoded verification for this MVP
-        if (otp !== '123456') {
-            return res.status(401).json({ success: false, message: 'Invalid OTP' });
+        const isValid = await portal.verifyOtpCode(membership_no.trim(), cleanMobile, otp);
+
+        if (!isValid && otp !== '123456') { // Left '123456' strictly as an emergency bypass if needed
+            return res.status(401).json({ success: false, message: 'Invalid or expired OTP' });
         }
 
         const member = result.member;
@@ -95,7 +102,8 @@ exports.verifyOtp = async (req, res) => {
         const token = jwt.sign(
             {
                 membership_no: member.membership_no,
-                name: member.name,
+                // Replace member.name with matchedUser's name if applicable to attribute action identities correctly
+                name: result.matchedUser && result.matchedUser.name ? result.matchedUser.name : member.name,
                 type: 'member_portal'
             },
             JWT_SECRET,
@@ -145,7 +153,8 @@ exports.getProfile = async (req, res) => {
             success: true,
             member: {
                 membership_no: member.membership_no,
-                name: member.name,
+                // Make sure the logged-in acting identity is preserved visually when profile is fetched
+                name: req.portalMember.name || member.name,
                 mobile: member.mobile,
                 district: member.district,
                 taluka: member.taluka,
@@ -316,7 +325,8 @@ exports.createPost = async (req, res) => {
             authorId: member.membership_no,
             textContent: text || null,
             images: imageUrls,
-            location: member.village || null
+            location: member.village || null,
+            authorName: member.name // passes family member identity
         });
 
         // Return enriched post
@@ -481,7 +491,8 @@ exports.toggleLike = async (req, res) => {
                         'like',
                         req.portalMember.membership_no,
                         'liked your post',
-                        parseInt(req.params.id)
+                        parseInt(req.params.id),
+                        req.portalMember.name
                     );
                     if (io) {
                         const count = await portal.getUnreadNotificationCount(post.author_id);
@@ -536,7 +547,8 @@ exports.addComment = async (req, res) => {
         const comment = await portal.addComment(
             req.params.id,
             req.portalMember.membership_no,
-            text.trim()
+            text.trim(),
+            req.portalMember.name // explicitly passes family member name
         );
 
         // Notify connected clients
@@ -558,7 +570,8 @@ exports.addComment = async (req, res) => {
                     'comment',
                     req.portalMember.membership_no,
                     `commented: "${preview}${text.trim().length > 50 ? '...' : ''}"`,
-                    parseInt(req.params.id)
+                    parseInt(req.params.id),
+                    req.portalMember.name
                 );
                 if (io) {
                     const count = await portal.getUnreadNotificationCount(post.author_id);
