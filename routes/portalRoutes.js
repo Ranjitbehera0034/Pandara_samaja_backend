@@ -23,6 +23,7 @@ module.exports = (upload) => {
     // Profile.tsx calls PUT /api/portal/members/:id and POST /api/portal/members/:id/photo
     router.put('/members/:id', requirePortalAuth, portalCtrl.updateProfile);
     router.post('/members/:id/photo', requirePortalAuth, upload.single('photo'), portalCtrl.uploadProfilePhoto);
+    router.delete('/members/:id/photo', requirePortalAuth, portalCtrl.deleteProfilePhoto);
 
     // Community Posts (Feed)
     router.get('/posts', requirePortalAuth, portalCtrl.getPosts);
