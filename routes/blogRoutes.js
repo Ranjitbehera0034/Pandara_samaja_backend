@@ -1,15 +1,18 @@
 const express = require('express');
-const router = express.Router();
 const postCtrl = require('../controllers/blogController');
 const { requireAuth } = require('../middleware/auth');
 
-// Public routes
-router.get('/', postCtrl.getAll);
-router.get('/:id', postCtrl.getOne);
+module.exports = (upload) => {
+    const router = express.Router();
 
-// Protected routes (require authentication)
-router.post('/', requireAuth, postCtrl.create);
-router.put('/:id', requireAuth, postCtrl.update);
-router.delete('/:id', requireAuth, postCtrl.remove);
+    // Public routes
+    router.get('/', postCtrl.getAll);
+    router.get('/:id', postCtrl.getOne);
 
-module.exports = router;
+    // Protected routes (require authentication)
+    router.post('/', requireAuth, upload.single('image'), postCtrl.create);
+    router.put('/:id', requireAuth, upload.single('image'), postCtrl.update);
+    router.delete('/:id', requireAuth, postCtrl.remove);
+
+    return router;
+};
