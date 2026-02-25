@@ -854,6 +854,20 @@ exports.markNotificationRead = async (req, res) => {
 };
 
 /**
+ * DELETE /api/portal/notifications/:id
+ * Delete a notification
+ */
+exports.deleteNotification = async (req, res) => {
+    try {
+        await portal.deleteNotification(req.params.id, req.portalMember.membership_no);
+        res.json({ success: true, message: 'Notification deleted' });
+    } catch (error) {
+        console.error('Delete notification error:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete notification' });
+    }
+};
+
+/**
  * PUT /api/portal/notifications/read-all
  * Mark all notifications as read
  */
