@@ -11,6 +11,7 @@ module.exports = (upload) => {
 
     // ── Public routes (no auth) ──
     router.post('/login', portalCtrl.login);
+    router.post('/login/verify-otp', portalCtrl.verifyOtp);
 
     // ── Protected routes (require member portal JWT) ──
 
