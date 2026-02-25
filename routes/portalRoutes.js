@@ -18,6 +18,7 @@ module.exports = (upload) => {
     router.get('/me', requirePortalAuth, portalCtrl.getProfile);
     router.put('/profile', requirePortalAuth, portalCtrl.updateProfile);
     router.post('/profile/photo', requirePortalAuth, upload.single('photo'), portalCtrl.uploadProfilePhoto);
+    router.delete('/profile/photo', requirePortalAuth, portalCtrl.deleteProfilePhoto);
 
     // Profile — alias routes (frontend compatibility)
     // Profile.tsx calls PUT /api/portal/members/:id and POST /api/portal/members/:id/photo
