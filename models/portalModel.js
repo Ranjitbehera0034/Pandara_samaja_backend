@@ -17,12 +17,30 @@ exports.findByCredentials = async (membershipNo, mobile) => {
     const member = res.rows[0];
     if (!member) return null;
 
-    // Compare mobile (strip non-digits)
-    const dbMobile = (member.mobile || '').replace(/\D/g, '');
     const inputMobile = (mobile || '').replace(/\D/g, '');
+    if (!inputMobile) return null;
 
-    if (!dbMobile || !inputMobile) return null;
-    if (dbMobile !== inputMobile) return null;
+    let matchedUser = null;
+
+    // Check head of family mobile
+    const dbMobile = (member.mobile || '').replace(/\D/g, '');
+    if (dbMobile === inputMobile) {
+        matchedUser = { name: member.name, relation: 'Self/Head' };
+    }
+
+    // Check family members
+    if (!matchedUser && Array.isArray(member.family_members)) {
+        for (const fm of member.family_members) {
+            const fmMobile = (fm.mobile || '').replace(/\D/g, '');
+            const fmAge = Number(fm.age) || 0;
+            if (fmMobile === inputMobile && fmAge >= 18) {
+                matchedUser = { name: fm.name, relation: fm.relation };
+                break;
+            }
+        }
+    }
+
+    if (!matchedUser) return null;
 
     // Update last portal login
     await pool.query(
@@ -30,7 +48,7 @@ exports.findByCredentials = async (membershipNo, mobile) => {
         [membershipNo]
     );
 
-    return member;
+    return { member, matchedUser };
 };
 
 /**

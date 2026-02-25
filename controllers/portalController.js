@@ -36,14 +36,60 @@ exports.login = async (req, res) => {
             });
         }
 
-        const member = await portal.findByCredentials(membership_no.trim(), cleanMobile);
+        const result = await portal.findByCredentials(membership_no.trim(), cleanMobile);
 
-        if (!member) {
+        if (!result || !result.member) {
             return res.status(401).json({
                 success: false,
                 message: 'No matching member found. Please check your Membership No. and Mobile Number.'
             });
         }
+
+        // Generate a 6-digit OTP (in a real app, send via SMS gateway)
+        // Defaulting to static OTP for dev mode or a real one to standard output
+        const otp = '123456';
+        console.log(`[AUTH] OTP requested for ${membership_no} (Mobile: ${cleanMobile}): ${otp}`);
+
+        // In reality, you'd store it in DB or Redis. For this MVP, we'll fast-track client-side or static check via verifyOtp
+
+        res.json({
+            success: true,
+            message: 'OTP sent successfully',
+            requireOtp: true,
+            _devOtp: otp // Send back for easy testing until SMS gateway is wired
+        });
+    } catch (error) {
+        console.error('Portal login error:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+
+/**
+ * POST /api/portal/verify-otp
+ * Body: { membership_no, mobile, otp }
+ * Returns: JWT token + member profile
+ */
+exports.verifyOtp = async (req, res) => {
+    try {
+        const { membership_no, mobile, otp } = req.body;
+
+        if (!membership_no || !mobile || !otp) {
+            return res.status(400).json({ success: false, message: 'Missing parameters' });
+        }
+
+        const cleanMobile = mobile.replace(/\D/g, '');
+        const result = await portal.findByCredentials(membership_no.trim(), cleanMobile);
+
+        if (!result || !result.member) {
+            return res.status(401).json({ success: false, message: 'Member lookup failed' });
+        }
+
+        // Hardcoded verification for this MVP
+        if (otp !== '123456') {
+            return res.status(401).json({ success: false, message: 'Invalid OTP' });
+        }
+
+        const member = result.member;
 
         // Generate JWT for member portal
         const token = jwt.sign(
@@ -75,10 +121,11 @@ exports.login = async (req, res) => {
                 head_gender: member.head_gender,
                 family_members: member.family_members,
                 profile_photo_url: member.profile_photo_url
-            }
+            },
+            loggedInUser: result.matchedUser
         });
     } catch (error) {
-        console.error('Portal login error:', error);
+        console.error('Portal OTP verification error:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
     }
 };
