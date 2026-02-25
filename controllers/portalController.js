@@ -55,14 +55,40 @@ exports.login = async (req, res) => {
 
         console.log(`[AUTH] OTP requested for ${membership_no} (Mobile: ${cleanMobile}): ${otp}`);
 
-        // TODO: Integrate actual SMS gateway API call right here!
-        // axios.post('https://sms-provider.com/send', { number: cleanMobile, message: \`Your OTP is \${otp}\` })
+        if (process.env.FAST2SMS_API_KEY) {
+            try {
+                const smsResponse = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+                    method: "POST",
+                    headers: {
+                        "authorization": process.env.FAST2SMS_API_KEY,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        route: "q",
+                        message: `Your OTP for Pandara Samaja Login is ${otp}. Please do not share this OTP with anyone.`,
+                        language: "english",
+                        flash: 0,
+                        numbers: cleanMobile,
+                    })
+                });
+
+                const smsResult = await smsResponse.json();
+                if (!smsResult.return) {
+                    console.error('[AUTH] Fast2SMS Error:', smsResult);
+                    return res.status(500).json({ success: false, message: 'Failed to send OTP to mobile. Please try again later.' });
+                }
+            } catch (smsError) {
+                console.error('[AUTH] Fast2SMS Request Failed:', smsError);
+                return res.status(500).json({ success: false, message: 'Failed to send OTP. Network error.' });
+            }
+        } else {
+            console.warn('[AUTH] FAST2SMS_API_KEY is missing. OTP was not sent via SMS.');
+        }
 
         res.json({
             success: true,
             message: 'OTP sent successfully',
-            requireOtp: true,
-            _devOtp: otp // Note: For production security, REMOVE _devOtp from frontend payload
+            requireOtp: true
         });
     } catch (error) {
         console.error('Portal login error:', error);
