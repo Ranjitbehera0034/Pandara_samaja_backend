@@ -67,11 +67,16 @@ async function uploadFile(file) {
   }
 
   // 1. Upload to Drive
+  const createReqBody = {
+    name: file.originalname,
+  };
+
+  if (FOLDER_ID) {
+    createReqBody.parents = [FOLDER_ID];
+  }
+
   const res = await drive.files.create({
-    requestBody: {
-      name: file.originalname,
-      parents: [FOLDER_ID],
-    },
+    requestBody: createReqBody,
     media: {
       mimeType: mime.lookup(file.originalname) || 'application/octet-stream',
       body: stream

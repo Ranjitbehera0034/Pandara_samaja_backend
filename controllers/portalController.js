@@ -200,6 +200,26 @@ exports.uploadProfilePhoto = async (req, res) => {
     }
 };
 
+/**
+ * DELETE /api/portal/profile/photo
+ * Remove a profile photo
+ */
+exports.deleteProfilePhoto = async (req, res) => {
+    try {
+        await portal.updateMemberProfile(req.portalMember.membership_no, {
+            profile_photo_url: null
+        });
+
+        res.json({
+            success: true,
+            message: 'Profile photo removed'
+        });
+    } catch (error) {
+        console.error('Delete profile photo error:', error);
+        res.status(500).json({ success: false, message: 'Failed to remove photo' });
+    }
+};
+
 
 // ═══════════════════════════════════════════════════
 //  COMMUNITY POSTS (FEED)
