@@ -51,6 +51,32 @@ exports.findByCredentials = async (membershipNo, mobile) => {
     return { member, matchedUser };
 };
 
+exports.saveOtp = async (membershipNo, mobile, otp) => {
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
+    await pool.query(
+        `INSERT INTO portal_otps (membership_no, mobile, otp_code, expires_at)
+         VALUES ($1, $2, $3, $4)`,
+        [membershipNo, mobile, otp, expiresAt]
+    );
+};
+
+exports.verifyOtpCode = async (membershipNo, mobile, otp) => {
+    const res = await pool.query(
+        `SELECT id, expires_at FROM portal_otps 
+         WHERE membership_no = $1 AND mobile = $2 AND otp_code = $3 
+         ORDER BY created_at DESC LIMIT 1`,
+        [membershipNo, mobile, otp]
+    );
+    const record = res.rows[0];
+    if (!record) return false;
+
+    if (new Date() > record.expires_at) return false; // Expired
+
+    // Delete used OTP
+    await pool.query(`DELETE FROM portal_otps WHERE id = $1`, [record.id]);
+    return true;
+};
+
 /**
  * Get member profile by membership_no (full details for logged-in member)
  */
@@ -100,12 +126,12 @@ exports.updateMemberProfile = async (membershipNo, data) => {
 /**
  * Create a new community post
  */
-exports.createPost = async ({ authorId, textContent, images, location }) => {
+exports.createPost = async ({ authorId, textContent, images, location, authorName }) => {
     const res = await pool.query(
-        `INSERT INTO portal_posts (author_id, text_content, images, location)
-     VALUES ($1, $2, $3, $4)
+        `INSERT INTO portal_posts (author_id, text_content, images, location, author_name)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-        [authorId, textContent || null, images || [], location || null]
+        [authorId, textContent || null, images || [], location || null, authorName || null]
     );
     return res.rows[0];
 };
@@ -117,7 +143,7 @@ exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null }) => {
     const offset = (page - 1) * limit;
     const res = await pool.query(
         `SELECT p.*,
-            m.name AS author_name,
+            COALESCE(p.author_name, m.name) AS author_name,
             m.village AS author_village,
             m.district AS author_district,
             m.profile_photo_url AS author_photo,
@@ -140,7 +166,7 @@ exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null }) => {
 exports.getPost = async (postId, membershipNo) => {
     const res = await pool.query(
         `SELECT p.*,
-            m.name AS author_name,
+            COALESCE(p.author_name, m.name) AS author_name,
             m.village AS author_village,
             m.district AS author_district,
             m.profile_photo_url AS author_photo,
@@ -293,16 +319,16 @@ exports.toggleLike = async (postId, memberId) => {
 /**
  * Add a comment to a post
  */
-exports.addComment = async (postId, memberId, text) => {
+exports.addComment = async (postId, memberId, text, authorName) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
         const res = await client.query(
-            `INSERT INTO portal_comments (post_id, member_id, text)
-       VALUES ($1, $2, $3)
+            `INSERT INTO portal_comments (post_id, member_id, text, author_name)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-            [postId, memberId, text]
+            [postId, memberId, text, authorName || null]
         );
 
         await client.query(
@@ -314,7 +340,7 @@ exports.addComment = async (postId, memberId, text) => {
 
         // Fetch with author name
         const commentWithAuthor = await client.query(
-            `SELECT c.*, m.name AS author_name
+            `SELECT c.*, COALESCE(c.author_name, m.name) AS author_name
        FROM portal_comments c
        JOIN members m ON m.membership_no = c.member_id
        WHERE c.id = $1`,
@@ -350,7 +376,7 @@ exports.addComment = async (postId, memberId, text) => {
  */
 exports.getComments = async (postId) => {
     const res = await pool.query(
-        `SELECT c.*, m.name AS author_name
+        `SELECT c.*, COALESCE(c.author_name, m.name) AS author_name
      FROM portal_comments c
      JOIN members m ON m.membership_no = c.member_id
      WHERE c.post_id = $1
@@ -510,19 +536,19 @@ exports.getFollowers = async (memberId) => {
 // ═══════════════════════════════════════════════════
 
 // Create a notification
-module.exports.createNotification = async (recipientId, type, actorId, message, postId = null) => {
+module.exports.createNotification = async (recipientId, type, actorId, message, postId = null, actorName = null) => {
     const res = await pool.query(
-        `INSERT INTO portal_notifications (recipient_id, type, actor_id, message, post_id)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO portal_notifications (recipient_id, type, actor_id, message, post_id, actor_name)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [recipientId, type, actorId, message, postId]
+        [recipientId, type, actorId, message, postId, actorName]
     );
     return res.rows[0];
 };
 
 exports.getNotifications = async (memberId) => {
     const res = await pool.query(
-        `SELECT n.id, n.type, m.name AS "actorName", m.profile_photo_url AS "actorAvatar", n.message, n.created_at AS timestamp, n.is_read AS read, n.post_id AS "postId"
+        `SELECT n.id, n.type, COALESCE(n.actor_name, m.name) AS "actorName", m.profile_photo_url AS "actorAvatar", n.message, n.created_at AS timestamp, n.is_read AS read, n.post_id AS "postId"
          FROM portal_notifications n
          JOIN members m ON m.membership_no = n.actor_id
          WHERE n.recipient_id = $1
