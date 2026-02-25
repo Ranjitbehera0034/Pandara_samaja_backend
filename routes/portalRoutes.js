@@ -1,0 +1,100 @@
+// routes/portalRoutes.js — Member Portal API routes
+const express = require('express');
+const router = express.Router();
+const portalCtrl = require('../controllers/portalController');
+const { requirePortalAuth } = require('../middleware/portalAuth');
+
+/**
+ * Factory function — receives multer instance from app.js
+ */
+module.exports = (upload) => {
+
+    // ── Public routes (no auth) ──
+    router.post('/login', portalCtrl.login);
+
+    // ── Protected routes (require member portal JWT) ──
+
+    // Profile
+    router.get('/me', requirePortalAuth, portalCtrl.getProfile);
+    router.put('/profile', requirePortalAuth, portalCtrl.updateProfile);
+    router.post('/profile/photo', requirePortalAuth, upload.single('photo'), portalCtrl.uploadProfilePhoto);
+
+    // Profile — alias routes (frontend compatibility)
+    // Profile.tsx calls PUT /api/portal/members/:id and POST /api/portal/members/:id/photo
+    router.put('/members/:id', requirePortalAuth, portalCtrl.updateProfile);
+    router.post('/members/:id/photo', requirePortalAuth, upload.single('photo'), portalCtrl.uploadProfilePhoto);
+
+    // Community Posts (Feed)
+    router.get('/posts', requirePortalAuth, portalCtrl.getPosts);
+    router.post('/posts', requirePortalAuth, upload.array('images', 10), portalCtrl.createPost);
+    router.put('/posts/:id', requirePortalAuth, portalCtrl.editPost);
+    router.delete('/posts/:id', requirePortalAuth, portalCtrl.deletePost);
+    router.post('/posts/:id/report', requirePortalAuth, portalCtrl.reportPost);
+
+    // Likes
+    router.post('/posts/:id/like', requirePortalAuth, portalCtrl.toggleLike);
+
+    // Comments
+    router.get('/posts/:id/comments', requirePortalAuth, portalCtrl.getComments);
+    router.post('/posts/:id/comments', requirePortalAuth, portalCtrl.addComment);
+    router.delete('/comments/:id', requirePortalAuth, portalCtrl.deleteComment);
+
+    // Photo Gallery
+    router.get('/photos', requirePortalAuth, portalCtrl.getMyPhotos);
+    router.get('/photos/:memberId', requirePortalAuth, portalCtrl.getMemberPhotos);
+    router.post('/photos', requirePortalAuth, upload.array('photos', 10), portalCtrl.uploadPhotos);
+    router.delete('/photos/:id', requirePortalAuth, portalCtrl.deletePhoto);
+
+    // Subscriptions (Follow / Unfollow)
+    router.post('/subscribe/:memberId', requirePortalAuth, portalCtrl.toggleSubscription);
+    router.get('/subscriptions', requirePortalAuth, portalCtrl.getSubscriptions);
+
+    // Members directory
+    router.get('/members', requirePortalAuth, portalCtrl.getMembers);
+    router.get('/members/:id', requirePortalAuth, portalCtrl.getMemberById);
+
+    // Notifications
+    router.get('/notifications', requirePortalAuth, portalCtrl.getNotifications);
+    router.get('/notifications/unread-count', requirePortalAuth, portalCtrl.getUnreadCount);
+    router.put('/notifications/read-all', requirePortalAuth, portalCtrl.markAllNotificationsRead);
+    router.put('/notifications/:id/read', requirePortalAuth, portalCtrl.markNotificationRead);
+
+    // Chat (REST endpoints for history)
+    router.get('/chat/contacts', requirePortalAuth, portalCtrl.getChatContacts);
+    router.get('/chat/conversation/:memberId', requirePortalAuth, portalCtrl.getConversation);
+    router.put('/chat/read/:memberId', requirePortalAuth, portalCtrl.markChatRead);
+
+    // ── Family Hub Routes (Phase 6) ──
+    const familyCtrl = require('../controllers/familyController');
+    router.get('/family/albums', requirePortalAuth, familyCtrl.getAlbums);
+    router.post('/family/albums', requirePortalAuth, upload.single('cover'), familyCtrl.createAlbum);
+    router.delete('/family/albums/:id', requirePortalAuth, familyCtrl.deleteAlbum);
+    router.post('/family/albums/:id/photos', requirePortalAuth, upload.array('photos', 20), familyCtrl.uploadPhotosToAlbum);
+
+    router.get('/family/events', requirePortalAuth, familyCtrl.getEvents);
+    router.post('/family/events', requirePortalAuth, familyCtrl.createEvent);
+    router.delete('/family/events/:id', requirePortalAuth, familyCtrl.deleteEvent);
+    router.post('/family/events/:id/rsvp', requirePortalAuth, familyCtrl.rsvpEvent);
+
+    router.get('/family/accounts', requirePortalAuth, familyCtrl.getAccounts);
+    router.post('/family/accounts', requirePortalAuth, familyCtrl.createAccount);
+    router.put('/family/accounts/:accountId/status', requirePortalAuth, familyCtrl.updateAccountStatus);
+    router.delete('/family/accounts/:accountId', requirePortalAuth, familyCtrl.deleteAccount);
+
+    // ── Community Routes (Phases 4 & 5) ──
+    const communityCtrl = require('../controllers/communityController');
+    router.get('/events', requirePortalAuth, communityCtrl.getEvents);
+    router.post('/events', requirePortalAuth, upload.single('image'), communityCtrl.createEvent);
+    router.post('/events/:id/register', requirePortalAuth, communityCtrl.registerEvent);
+
+    router.get('/groups', requirePortalAuth, communityCtrl.getGroups);
+    router.post('/groups', requirePortalAuth, communityCtrl.createGroup);
+    router.post('/groups/:groupId/join', requirePortalAuth, communityCtrl.joinGroup);
+
+    router.get('/explore/stats', requirePortalAuth, communityCtrl.getExploreStats);
+
+    // ── Advanced Features ──
+    router.get('/live/streams', requirePortalAuth, communityCtrl.getLiveStreams);
+
+    return router;
+};

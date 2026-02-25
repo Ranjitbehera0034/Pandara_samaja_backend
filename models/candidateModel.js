@@ -2,10 +2,10 @@ const db = require('../config/db');
 
 /* ─────────────── READ ─────────────── */
 exports.getAll = () =>
-  db.query('SELECT * FROM candidates WHERE is_matched = false ORDER BY name');
+  db.query("SELECT * FROM candidates WHERE is_matched = false AND status = 'approved' ORDER BY name");
 
 exports.getAllByGender = gender =>
-  db.query('SELECT * FROM candidates WHERE gender = $1 AND is_matched = false ORDER BY name', [gender]);
+  db.query("SELECT * FROM candidates WHERE gender = $1 AND is_matched = false AND status = 'approved' ORDER BY name", [gender]);
 
 exports.getById = id =>
   db.query('SELECT * FROM candidates WHERE id = $1', [id]);
