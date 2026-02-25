@@ -61,6 +61,7 @@ module.exports = (upload) => {
     router.get('/notifications/unread-count', requirePortalAuth, portalCtrl.getUnreadCount);
     router.put('/notifications/read-all', requirePortalAuth, portalCtrl.markAllNotificationsRead);
     router.put('/notifications/:id/read', requirePortalAuth, portalCtrl.markNotificationRead);
+    router.delete('/notifications/:id', requirePortalAuth, portalCtrl.deleteNotification);
 
     // Chat (REST endpoints for history)
     router.get('/chat/contacts', requirePortalAuth, portalCtrl.getChatContacts);

@@ -71,3 +71,18 @@ CREATE TABLE IF NOT EXISTS portal_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_portal_subs_follower  ON portal_subscriptions(follower_id);
 CREATE INDEX IF NOT EXISTS idx_portal_subs_following ON portal_subscriptions(following_id);
+
+-- 7. Notifications
+CREATE TABLE IF NOT EXISTS portal_notifications (
+  id            SERIAL PRIMARY KEY,
+  recipient_id  VARCHAR(10) NOT NULL REFERENCES members(membership_no) ON DELETE CASCADE,
+  actor_id      VARCHAR(10) NOT NULL REFERENCES members(membership_no) ON DELETE CASCADE,
+  type          VARCHAR(50) NOT NULL, -- 'like', 'comment', 'follow', 'mention', 'system'
+  post_id       INTEGER REFERENCES portal_posts(id) ON DELETE CASCADE,
+  message       TEXT,
+  is_read       BOOLEAN DEFAULT FALSE,
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_portal_notifications_recipient ON portal_notifications(recipient_id);
+CREATE INDEX IF NOT EXISTS idx_portal_notifications_created ON portal_notifications(created_at DESC);

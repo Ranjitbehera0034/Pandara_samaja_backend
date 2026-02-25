@@ -257,12 +257,26 @@ exports.toggleLike = async (postId, memberId) => {
 
         // Get updated count
         const countRes = await client.query(
-            `SELECT likes_count FROM portal_posts WHERE id = $1`,
+            `SELECT likes_count, author_id FROM portal_posts WHERE id = $1`,
             [postId]
         );
 
+        const likes_count = countRes.rows[0]?.likes_count || 0;
+        const authorId = countRes.rows[0]?.author_id;
+
+        if (liked && authorId && authorId !== memberId) {
+            // Get actor name
+            const actorRes = await client.query('SELECT name FROM members WHERE membership_no = $1', [memberId]);
+            const actorName = actorRes.rows[0]?.name || 'Someone';
+            await client.query(
+                `INSERT INTO portal_notifications (recipient_id, actor_id, type, post_id, message) 
+                 VALUES ($1, $2, 'like', $3, $4)`,
+                [authorId, memberId, postId, `liked your post`]
+            );
+        }
+
         await client.query('COMMIT');
-        return { liked, likes_count: countRes.rows[0]?.likes_count || 0 };
+        return { liked, likes_count };
     } catch (e) {
         await client.query('ROLLBACK');
         throw e;
@@ -299,13 +313,28 @@ exports.addComment = async (postId, memberId, text) => {
         await client.query('COMMIT');
 
         // Fetch with author name
-        const commentWithAuthor = await pool.query(
+        const commentWithAuthor = await client.query(
             `SELECT c.*, m.name AS author_name
        FROM portal_comments c
        JOIN members m ON m.membership_no = c.member_id
        WHERE c.id = $1`,
             [res.rows[0].id]
         );
+
+        // Fetch post author for notification
+        const postRes = await client.query('SELECT author_id FROM portal_posts WHERE id = $1', [postId]);
+        const authorId = postRes.rows[0]?.author_id;
+
+        if (authorId && authorId !== memberId) {
+            const actorName = commentWithAuthor.rows[0].author_name || 'Someone';
+            // Limit text snippet
+            const textSnippet = text.length > 30 ? text.substring(0, 30) + '...' : text;
+            await client.query(
+                `INSERT INTO portal_notifications (recipient_id, actor_id, type, post_id, message) 
+                 VALUES ($1, $2, 'comment', $3, $4)`,
+                [authorId, memberId, postId, `commented: "${textSnippet}"`]
+            );
+        }
 
         return commentWithAuthor.rows[0];
     } catch (e) {
@@ -432,6 +461,16 @@ exports.toggleSubscription = async (followerId, followingId) => {
             `INSERT INTO portal_subscriptions (follower_id, following_id) VALUES ($1, $2)`,
             [followerId, followingId]
         );
+
+        // Notify
+        const actorRes = await pool.query('SELECT name FROM members WHERE membership_no = $1', [followerId]);
+        const actorName = actorRes.rows[0]?.name || 'Someone';
+        await pool.query(
+            `INSERT INTO portal_notifications (recipient_id, actor_id, type, message) 
+             VALUES ($1, $2, 'follow', $3)`,
+            [followingId, followerId, `started following you`]
+        );
+
         return { subscribed: true };
     }
 };
@@ -456,7 +495,7 @@ exports.getSubscriptions = async (memberId) => {
  */
 exports.getFollowers = async (memberId) => {
     const res = await pool.query(
-        `SELECT s.follower_id, m.name, m.village, m.district, m.profile_photo_url, m.membership_no
+        `SELECT follower_id as id, m.name, m.village, m.district, m.profile_photo_url, m.membership_no
      FROM portal_subscriptions s
      JOIN members m ON m.membership_no = s.follower_id
      WHERE s.following_id = $1
@@ -464,6 +503,65 @@ exports.getFollowers = async (memberId) => {
         [memberId]
     );
     return res.rows;
+};
+
+// ═══════════════════════════════════════════════════
+//  NOTIFICATIONS
+// ═══════════════════════════════════════════════════
+
+// Create a notification
+module.exports.createNotification = async (recipientId, type, actorId, message, postId = null) => {
+    const res = await pool.query(
+        `INSERT INTO portal_notifications (recipient_id, type, actor_id, message, post_id)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [recipientId, type, actorId, message, postId]
+    );
+    return res.rows[0];
+};
+
+exports.getNotifications = async (memberId) => {
+    const res = await pool.query(
+        `SELECT n.id, n.type, m.name AS "actorName", m.profile_photo_url AS "actorAvatar", n.message, n.created_at AS timestamp, n.is_read AS read, n.post_id AS "postId"
+         FROM portal_notifications n
+         JOIN members m ON m.membership_no = n.actor_id
+         WHERE n.recipient_id = $1
+         ORDER BY n.created_at DESC
+         LIMIT 50`,
+        [memberId]
+    );
+    // Standardize IDs to string for frontend compatibility
+    return res.rows.map(r => ({ ...r, id: String(r.id) }));
+};
+
+exports.getUnreadNotificationCount = async (memberId) => {
+    const res = await pool.query(
+        `SELECT COUNT(*) FROM portal_notifications WHERE recipient_id = $1 AND is_read = FALSE`,
+        [memberId]
+    );
+    return parseInt(res.rows[0].count, 10);
+};
+
+exports.markNotificationRead = async (id, memberId) => {
+    const res = await pool.query(
+        `UPDATE portal_notifications SET is_read = TRUE WHERE id = $1 AND recipient_id = $2 RETURNING *`,
+        [id, memberId]
+    );
+    return res.rows[0];
+};
+
+exports.markAllNotificationsRead = async (memberId) => {
+    await pool.query(
+        `UPDATE portal_notifications SET is_read = TRUE WHERE recipient_id = $1`,
+        [memberId]
+    );
+};
+
+exports.deleteNotification = async (id, memberId) => {
+    await pool.query(
+        `DELETE FROM portal_notifications WHERE id = $1 AND recipient_id = $2`,
+        [id, memberId]
+    );
 };
 
 /**
