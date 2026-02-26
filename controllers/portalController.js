@@ -75,7 +75,10 @@ exports.login = async (req, res) => {
                 const smsResult = await smsResponse.json();
                 if (!smsResult.return) {
                     console.error('[AUTH] Fast2SMS Error:', smsResult);
-                    return res.status(500).json({ success: false, message: 'Failed to send OTP to mobile. Please try again later.' });
+                    return res.status(500).json({
+                        success: false,
+                        message: `Fast2SMS Error: ${smsResult.message || 'Failed to send OTP. Please try again later.'}`
+                    });
                 }
             } catch (smsError) {
                 console.error('[AUTH] Fast2SMS Request Failed:', smsError);
