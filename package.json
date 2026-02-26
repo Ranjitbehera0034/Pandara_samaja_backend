@@ -25,7 +25,9 @@
     "pg": "^8.16.0",
     "pg-cursor": "^2.15.3",
     "pg-format": "^1.0.4",
-    "socket.io": "^4.8.3"
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.3",
+    "speakeasy": "^2.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

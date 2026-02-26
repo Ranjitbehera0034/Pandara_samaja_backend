@@ -61,7 +61,7 @@ const requireAdmin = (req, res, next) => {
     });
   }
 
-  if (req.user.role !== 'admin') {
+  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
     return res.status(403).json({
       success: false,
       message: 'Admin access required'
@@ -74,10 +74,25 @@ const requireAdmin = (req, res, next) => {
 // Combined middleware: require auth + admin
 const requireAuthAdmin = [requireAuth, requireAdmin];
 
+// Middleware to check if user is super admin
+const requireSuperAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+  if (req.user.role !== 'super_admin') {
+    return res.status(403).json({ success: false, message: 'Super Admin access required' });
+  }
+  next();
+};
+
+const requireAuthSuperAdmin = [requireAuth, requireSuperAdmin];
+
 module.exports = {
   requireAuth,
   requireAdmin,
   requireAuthAdmin,
+  requireSuperAdmin,
+  requireAuthSuperAdmin,
   optionalAuth: (req, res, next) => {
     try {
       const authHeader = req.headers.authorization;
