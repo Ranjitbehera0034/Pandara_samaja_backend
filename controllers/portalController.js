@@ -64,10 +64,8 @@ exports.login = async (req, res) => {
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({
-                        route: "q",
-                        message: `Your OTP for Pandara Samaja Login is ${otp}. Please do not share this OTP with anyone.`,
-                        language: "english",
-                        flash: 0,
+                        route: "otp",
+                        variables_values: otp,
                         numbers: cleanMobile,
                     })
                 });
