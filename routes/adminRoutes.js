@@ -33,7 +33,15 @@ router.get('/banned-words', adminController.getBannedWords);
 router.post('/banned-words', adminController.addBannedWord);
 router.delete('/banned-words/:id', adminController.deleteBannedWord);
 
+// --- Super Admin specific routes ---
+const { requireAuthSuperAdmin } = require('../middleware/auth');
+
 // Audit Logs
-router.get('/audit-logs', adminController.getAuditLogs);
+router.get('/audit-logs', requireAuthSuperAdmin, adminController.getAuditLogs);
+
+// Maker-Checker
+router.get('/maker-checker', requireAuthSuperAdmin, adminController.getPendingActions);
+router.post('/maker-checker/:id/review', requireAuthSuperAdmin, adminController.reviewAction);
+router.post('/maker-checker/:id/undo', requireAuthSuperAdmin, adminController.undoAction);
 
 module.exports = router;

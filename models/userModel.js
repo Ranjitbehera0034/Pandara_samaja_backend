@@ -19,7 +19,7 @@ class UserModel {
   static async findById(id) {
     try {
       const result = await pool.query(
-        'SELECT id, username, role, created_at, last_login FROM users WHERE id = $1',
+        'SELECT id, username, role, created_at, last_login, mfa_secret, is_mfa_active FROM users WHERE id = $1',
         [id]
       );
       return result.rows[0] || null;
@@ -93,6 +93,26 @@ class UserModel {
   static async delete(userId) {
     try {
       await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Update MFA Secret
+  static async updateMfaSecret(userId, secret) {
+    try {
+      await pool.query('UPDATE users SET mfa_secret = $1 WHERE id = $2', [secret, userId]);
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Activate MFA
+  static async activateMfa(userId) {
+    try {
+      await pool.query('UPDATE users SET is_mfa_active = true WHERE id = $1', [userId]);
       return true;
     } catch (error) {
       throw error;

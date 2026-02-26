@@ -283,6 +283,16 @@ exports.updateMemberStatus = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid status' });
         }
 
+        // Maker-Checker Logic
+        if (req.user && req.user.role === 'admin') {
+            await pool.query(
+                `INSERT INTO admin_actions_queue (admin_username, action_type, target_type, target_id, payload) 
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [req.user.username, 'UPDATE_MEMBER_STATUS', 'Member', membershipNo, JSON.stringify({ status })]
+            );
+            return res.json({ success: true, message: 'Action queued for Super Admin approval', queued: true });
+        }
+
         const result = await pool.query(
             'UPDATE members SET status = $1 WHERE membership_no = $2 RETURNING *',
             [status, membershipNo]
@@ -297,6 +307,71 @@ exports.updateMemberStatus = async (req, res) => {
     } catch (error) {
         console.error('Error updating member status:', error);
         res.status(500).json({ success: false, message: 'Failed to update member status' });
+    }
+};
+
+// --- Maker-Checker Approvals (Super Admin Only) ---
+exports.getPendingActions = async (req, res) => {
+    try {
+        const result = await pool.query("SELECT * FROM admin_actions_queue WHERE status = 'pending' ORDER BY created_at ASC");
+        res.json({ success: true, actions: result.rows });
+    } catch (error) {
+        console.error('Error fetching pending actions:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch pending actions' });
+    }
+};
+
+exports.reviewAction = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body; // 'approved', 'rejected'
+
+        if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ success: false, message: 'Invalid status' });
+
+        const queueRes = await pool.query("SELECT * FROM admin_actions_queue WHERE id = $1", [id]);
+        if (queueRes.rowCount === 0) return res.status(404).json({ success: false, message: 'Action not found' });
+
+        const action = queueRes.rows[0];
+
+        if (status === 'approved') {
+            // Apply action
+            if (action.action_type === 'UPDATE_MEMBER_STATUS') {
+                await pool.query('UPDATE members SET status = $1 WHERE membership_no = $2', [action.payload.status, action.target_id]);
+                await logAdminAction(req, 'APPROVE_MEMBER_STATUS', 'Member', action.target_id, { status: action.payload.status, originalAdmin: action.admin_username });
+            }
+        }
+
+        await pool.query(
+            "UPDATE admin_actions_queue SET status = $1, reviewer_username = $2, reviewed_at = CURRENT_TIMESTAMP WHERE id = $3",
+            [status, req.user.username, id]
+        );
+
+        res.json({ success: true, message: `Action ${status}` });
+    } catch (error) {
+        console.error('Error reviewing action:', error);
+        res.status(500).json({ success: false, message: 'Failed to review action' });
+    }
+};
+
+exports.undoAction = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const queueRes = await pool.query("SELECT * FROM admin_actions_queue WHERE id = $1", [id]);
+        if (queueRes.rowCount === 0) return res.status(404).json({ success: false, message: 'Action not found' });
+        const action = queueRes.rows[0];
+
+        if (action.status !== 'approved') return res.status(400).json({ success: false, message: 'Can only undo approved actions' });
+
+        if (action.action_type === 'UPDATE_MEMBER_STATUS') {
+            await pool.query('UPDATE members SET status = $1 WHERE membership_no = $2', ['pending', action.target_id]); // Simplistic undo
+            await logAdminAction(req, 'UNDO_MEMBER_STATUS', 'Member', action.target_id, { status: 'pending', originalAdmin: action.admin_username });
+        }
+
+        await pool.query("UPDATE admin_actions_queue SET status = 'undone' WHERE id = $1", [id]);
+        res.json({ success: true, message: 'Action undone' });
+    } catch (error) {
+        console.error('Error undoing action:', error);
+        res.status(500).json({ success: false, message: 'Failed to undo action' });
     }
 };
 

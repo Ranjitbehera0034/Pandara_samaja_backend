@@ -45,6 +45,42 @@ class AuthController {
         });
       }
 
+      // MFA implementation
+      if (user.is_mfa_active) {
+        // Just return a token indicating MFA is needed
+        const mfaToken = jwt.sign(
+          {
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            is_mfa_pending: true
+          },
+          JWT_SECRET,
+          { expiresIn: '5m' } // Short lived token
+        );
+        return res.json({
+          success: true,
+          mfa_required: true,
+          token: mfaToken,
+          message: 'MFA code required'
+        });
+      }
+
+      // If MFA is not active, but the user is an admin, force them to set it up!
+      if (!user.is_mfa_active && (user.role === 'admin' || user.role === 'super_admin')) {
+        const tempToken = jwt.sign(
+          { id: user.id, username: user.username, role: user.role, mfa_setup_pending: true },
+          JWT_SECRET,
+          { expiresIn: '15m' }
+        );
+        return res.json({
+          success: true,
+          mfa_setup_required: true,
+          token: tempToken,
+          message: 'MFA setup required'
+        });
+      }
+
       console.log('✅ Login successful for user:', username);
 
       // Update last login
@@ -191,7 +227,7 @@ class AuthController {
       }
 
       // Only send alerts for admin logins
-      if (user.role === 'admin') {
+      if (user.role === 'admin' || user.role === 'super_admin') {
         await sendLoginAlert(user, req);
         return res.json({
           success: true,
@@ -209,6 +245,94 @@ class AuthController {
         success: false,
         message: 'Failed to send notification'
       });
+    }
+  }
+
+  // --- MFA Logic ---
+  static async setupMfa(req, res) {
+    try {
+      const user = req.user;
+      if (!user.id) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+      const speakeasy = require('speakeasy');
+      const qrcode = require('qrcode');
+
+      const secret = speakeasy.generateSecret({
+        name: `PandaraSamaja (${user.username})`
+      });
+
+      // Save secret to user
+      await UserModel.updateMfaSecret(user.id, secret.base32);
+
+      qrcode.toDataURL(secret.otpauth_url, (err, data_url) => {
+        if (err) return res.status(500).json({ success: false, message: 'QR Generate Error' });
+        res.json({
+          success: true,
+          secret: secret.base32,
+          qrCode: data_url
+        });
+      });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ success: false, message: 'MFA setup failed' });
+    }
+  }
+
+  static async verifyMfa(req, res) {
+    try {
+      const user = req.user; // user from the temp token
+      const { code } = req.body;
+
+      if (!code) return res.status(400).json({ success: false, message: 'Code is required' });
+
+      const dbUser = await UserModel.findById(user.id);
+      if (!dbUser || !dbUser.mfa_secret) {
+        return res.status(400).json({ success: false, message: 'MFA not configured' });
+      }
+
+      const speakeasy = require('speakeasy');
+      const verified = speakeasy.totp.verify({
+        secret: dbUser.mfa_secret,
+        encoding: 'base32',
+        token: code,
+        window: 1 // Allow 30 seconds drift either way
+      });
+
+      if (verified) {
+        // If they were setting it up, activate it
+        if (!dbUser.is_mfa_active) {
+          await UserModel.activateMfa(user.id);
+        }
+
+        // Full login!
+        await UserModel.updateLastLogin(user.id);
+
+        const token = jwt.sign(
+          {
+            id: dbUser.id,
+            username: dbUser.username,
+            role: dbUser.role
+          },
+          JWT_SECRET,
+          { expiresIn: JWT_EXPIRES_IN }
+        );
+
+        return res.json({
+          success: true,
+          message: 'MFA Verified, Login successful',
+          token,
+          user: {
+            id: dbUser.id,
+            username: dbUser.username,
+            role: dbUser.role
+          }
+        });
+      } else {
+        return res.status(401).json({ success: false, message: 'Invalid MFA Code' });
+      }
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ success: false, message: 'MFA verification failed' });
     }
   }
 }
