@@ -12,8 +12,8 @@ const router = express.Router();
 router.get('/search', optionalAuth, memberController.search);
 router.get('/', optionalAuth, memberController.getAll);
 
-// Export endpoint (can be public or protected based on requirements)
-router.get('/export', memberController.exportExcel);
+// Export endpoint — admin only (contains sensitive PII: mobile, Aadhar)
+router.get('/export', requireAuth, memberController.exportExcel);
 
 // Protected routes (require authentication)
 router.post('/', requireAuth, memberController.create);  // Create single member

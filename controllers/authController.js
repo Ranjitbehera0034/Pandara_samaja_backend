@@ -1,16 +1,7 @@
 const jwt = require('jsonwebtoken');
 const UserModel = require('../models/userModel');
 const { sendLoginAlert } = require('../utils/emailService');
-
-// JWT secret key - should be in environment variables
-if (!process.env.JWT_SECRET) {
-  console.warn("⚠️  WARNING: JWT_SECRET is not defined in .env file!");
-  console.warn("⚠️  Using fallback secret for development only.");
-  console.warn("⚠️  Please add JWT_SECRET to your .env file for production!");
-}
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/secrets');
 
 class AuthController {
   // Login

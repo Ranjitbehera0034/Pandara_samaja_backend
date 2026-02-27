@@ -1,13 +1,22 @@
 // server.js  (or app.js)
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const bodyParser = require('body-parser');
 const multer = require('multer');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
+
+// Fail fast if JWT_SECRET is missing (loaded via config/secrets.js)
+const { JWT_SECRET } = require('./config/secrets');
+const { generalLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
 
-/* ─── 1. Allowed-origin lists ──────────────────────────────── */
+/* ─── 1. Security headers ──────────────────────────────────── */
+app.use(helmet());
+
+/* ─── 2. Allowed-origin lists ──────────────────────────────── */
 const allowedOriginsDev = [
   'http://localhost:5000',
   'http://127.0.0.1:5000',
@@ -46,7 +55,7 @@ const allowedOrigins =
   process.env.NODE_ENV === 'production' ? allowedOriginsProd
     : allowedOriginsDev;
 
-/* ─── 2. CORS middleware ───────────────────────────────────── */
+/* ─── 3. CORS middleware ───────────────────────────────────── */
 app.use(
   cors({
     origin(origin, cb) {
@@ -66,13 +75,16 @@ app.use(
   })
 );
 
-/* ─── 3. Body-parser & routes ─────────────────────────────── */
+/* ─── 4. Rate limiting ─────────────────────────────────────── */
+app.use('/api/', generalLimiter);
+
+/* ─── 5. Body-parser & multer ──────────────────────────────── */
 app.use(bodyParser.json({ limit: '5mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
 
-/* ─── 3. Upload folder + multer ───────────────────────────── */
 const upload = multer({ storage: multer.memoryStorage() });
 
+/* ─── 6. Routes ────────────────────────────────────────────── */
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/candidates', require('./routes/candidateRoutes')(upload));
 app.use('/api/members', require('./routes/memberRoutes'));
@@ -82,12 +94,11 @@ app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/leaders', require('./routes/leaderRoutes')(upload));
 
 
-/* ─── 4. Start server ─────────────────────────────────────── */
+/* ─── 7. Start server ─────────────────────────────────────── */
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-  console.log(`📍 API Base URL: http://localhost:${PORT}/api`);
-  console.log(`⚠️  SECURITY: Change default admin password immediately!`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`API Base URL: http://localhost:${PORT}/api`);
 });
 
 // Initialize Socket.io
@@ -101,35 +112,57 @@ const io = require('socket.io')(server, {
 // Attach io to app so it can be used in routes/controllers
 app.set('io', io);
 
+/* ─── Socket.io Authentication Middleware ──────────────────── */
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  if (!token) {
+    return next(new Error('Authentication required'));
+  }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.type === 'member_portal') {
+      socket.userId = decoded.membership_no;
+      socket.userName = decoded.name;
+    } else {
+      return next(new Error('Invalid token type'));
+    }
+    next();
+  } catch (err) {
+    return next(new Error('Invalid or expired token'));
+  }
+});
+
 // Track online users: { membership_no: Set<socketId> }
 const onlineUsers = new Map();
 
 io.on('connection', (socket) => {
-  console.log('🔌 Socket connected:', socket.id);
-
   // ─── Join Chat ───
-  // Client sends: { userId: membership_no }
+  // Validate userId matches authenticated identity
   socket.on('join_chat', ({ userId }) => {
-    if (!userId) return;
-    socket.userId = userId;
+    // Force userId from authenticated socket to prevent impersonation
+    const authenticatedId = socket.userId;
+    if (userId !== authenticatedId) {
+      socket.emit('error', { message: 'User ID mismatch' });
+      return;
+    }
 
     // Track online status
-    if (!onlineUsers.has(userId)) {
-      onlineUsers.set(userId, new Set());
+    if (!onlineUsers.has(authenticatedId)) {
+      onlineUsers.set(authenticatedId, new Set());
     }
-    onlineUsers.get(userId).add(socket.id);
+    onlineUsers.get(authenticatedId).add(socket.id);
 
     // Join a personal room for direct messages
-    socket.join(`user:${userId}`);
+    socket.join(`user:${authenticatedId}`);
 
     // Broadcast online status
-    io.emit('user_online', { userId });
-
-    console.log(`👤 User ${userId} joined (${onlineUsers.get(userId).size} connections)`);
+    io.emit('user_online', { userId: authenticatedId });
   });
 
   // ─── Send Message (real-time + persist) ───
-  socket.on('send_message', async ({ senderId, receiverId, content, type }) => {
+  // Force senderId from authenticated socket identity
+  socket.on('send_message', async ({ receiverId, content, type }) => {
+    const senderId = socket.userId; // Always use authenticated identity
     if (!senderId || !receiverId || !content) return;
 
     try {
@@ -182,16 +215,18 @@ io.on('connection', (socket) => {
   });
 
   // ─── Typing indicators ───
-  socket.on('typing_start', ({ senderId, receiverId }) => {
-    io.to(`user:${receiverId}`).emit('typing_start', { senderId });
+  // Use authenticated identity for senderId
+  socket.on('typing_start', ({ receiverId }) => {
+    io.to(`user:${receiverId}`).emit('typing_start', { senderId: socket.userId });
   });
 
-  socket.on('typing_stop', ({ senderId, receiverId }) => {
-    io.to(`user:${receiverId}`).emit('typing_stop', { senderId });
+  socket.on('typing_stop', ({ receiverId }) => {
+    io.to(`user:${receiverId}`).emit('typing_stop', { senderId: socket.userId });
   });
 
   // ─── Mark messages as read ───
-  socket.on('mark_read', async ({ readerId, senderId }) => {
+  socket.on('mark_read', async ({ senderId }) => {
+    const readerId = socket.userId; // Always use authenticated identity
     try {
       const portal = require('./models/portalModel');
       await portal.markMessagesRead(readerId, senderId);
@@ -219,29 +254,23 @@ io.on('connection', (socket) => {
         io.emit('user_offline', { userId });
       }
     }
-    console.log('🔌 Socket disconnected:', socket.id);
   });
 });
 
 // Handle server errors
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') {
-    console.error(`❌ ERROR: Port ${PORT} is already in use!`);
-    console.error(`💡 Solution: Kill the existing process or use a different port:`);
-    console.error(`   - Kill existing: lsof -ti:${PORT} | xargs kill`);
-    console.error(`   - Use different port: PORT=5001 npm start`);
+    console.error(`Port ${PORT} is already in use.`);
     process.exit(1);
   } else {
-    console.error('❌ Server error:', error);
+    console.error('Server error:', error);
     process.exit(1);
   }
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('👋 SIGTERM received, shutting down gracefully...');
   server.close(() => {
-    console.log('✅ Server closed');
     process.exit(0);
   });
 });

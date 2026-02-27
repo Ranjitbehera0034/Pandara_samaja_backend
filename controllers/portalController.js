@@ -3,9 +3,7 @@ const jwt = require('jsonwebtoken');
 const portal = require('../models/portalModel');
 const { uploadFile } = require('../config/googleDrive');
 const pool = require('../config/db');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
-const PORTAL_JWT_EXPIRES = process.env.PORTAL_JWT_EXPIRES || '7d';
+const { JWT_SECRET, PORTAL_JWT_EXPIRES } = require('../config/secrets');
 
 // ═══════════════════════════════════════════════════
 //  AUTHENTICATION
@@ -46,14 +44,14 @@ exports.login = async (req, res) => {
         }
 
         // Generate a random 6-digit OTP
-        // e.g. Math.floor(100000 + Math.random() * 900000)
-        // Hardcoded 123456 as a backdoor fallback for local testing if desired, or skip it.
         const otp = String(Math.floor(100000 + Math.random() * 900000));
 
-        // Save the OTP into the db table with 5min expiration
+        // Save the OTP into the db table with 5min expiration (stored hashed)
         await portal.saveOtp(membership_no.trim(), cleanMobile, otp);
 
-        console.log(`[AUTH] OTP requested for ${membership_no} (Mobile: ${cleanMobile}): ${otp}`);
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`[AUTH] OTP requested for ${membership_no}`);
+        }
 
         if (process.env.FAST2SMS_API_KEY) {
             try {
@@ -119,7 +117,7 @@ exports.verifyOtp = async (req, res) => {
 
         const isValid = await portal.verifyOtpCode(membership_no.trim(), cleanMobile, otp);
 
-        if (!isValid && otp !== '123456') { // Left '123456' strictly as an emergency bypass if needed
+        if (!isValid) {
             return res.status(401).json({ success: false, message: 'Invalid or expired OTP' });
         }
 

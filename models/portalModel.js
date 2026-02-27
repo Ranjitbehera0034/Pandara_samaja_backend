@@ -1,5 +1,6 @@
 // models/portalModel.js — Data layer for Member Portal features
 const pool = require('../config/db');
+const bcrypt = require('bcryptjs');
 
 // ═══════════════════════════════════════════════════
 //  MEMBER LOGIN / PROFILE
@@ -53,24 +54,30 @@ exports.findByCredentials = async (membershipNo, mobile) => {
 
 exports.saveOtp = async (membershipNo, mobile, otp) => {
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
+    const otpHash = await bcrypt.hash(otp, 10);
     await pool.query(
         `INSERT INTO portal_otps (membership_no, mobile, otp_code, expires_at)
          VALUES ($1, $2, $3, $4)`,
-        [membershipNo, mobile, otp, expiresAt]
+        [membershipNo, mobile, otpHash, expiresAt]
     );
 };
 
 exports.verifyOtpCode = async (membershipNo, mobile, otp) => {
+    // Fetch the latest OTP record (hashed) for this member/mobile
     const res = await pool.query(
-        `SELECT id, expires_at FROM portal_otps 
-         WHERE membership_no = $1 AND mobile = $2 AND otp_code = $3 
+        `SELECT id, otp_code, expires_at FROM portal_otps
+         WHERE membership_no = $1 AND mobile = $2
          ORDER BY created_at DESC LIMIT 1`,
-        [membershipNo, mobile, otp]
+        [membershipNo, mobile]
     );
     const record = res.rows[0];
     if (!record) return false;
 
     if (new Date() > record.expires_at) return false; // Expired
+
+    // Compare provided OTP against the stored hash
+    const isMatch = await bcrypt.compare(otp, record.otp_code);
+    if (!isMatch) return false;
 
     // Delete used OTP
     await pool.query(`DELETE FROM portal_otps WHERE id = $1`, [record.id]);

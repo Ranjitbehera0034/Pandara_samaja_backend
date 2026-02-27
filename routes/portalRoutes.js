@@ -3,15 +3,18 @@ const express = require('express');
 const router = express.Router();
 const portalCtrl = require('../controllers/portalController');
 const { requirePortalAuth } = require('../middleware/portalAuth');
+const { authLimiter, otpLimiter } = require('../middleware/rateLimiter');
+const { validate } = require('../middleware/validate');
+const { loginSchema, verifyOtpSchema, commentSchema } = require('../validators/portalValidators');
 
 /**
  * Factory function — receives multer instance from app.js
  */
 module.exports = (upload) => {
 
-    // ── Public routes (no auth) ──
-    router.post('/login', portalCtrl.login);
-    router.post('/login/verify-otp', portalCtrl.verifyOtp);
+    // ── Public routes (no auth, rate limited + validated) ──
+    router.post('/login', authLimiter, validate(loginSchema), portalCtrl.login);
+    router.post('/login/verify-otp', otpLimiter, validate(verifyOtpSchema), portalCtrl.verifyOtp);
 
     // ── Protected routes (require member portal JWT) ──
 
@@ -37,9 +40,9 @@ module.exports = (upload) => {
     // Likes
     router.post('/posts/:id/like', requirePortalAuth, portalCtrl.toggleLike);
 
-    // Comments
+    // Comments (validated)
     router.get('/posts/:id/comments', requirePortalAuth, portalCtrl.getComments);
-    router.post('/posts/:id/comments', requirePortalAuth, portalCtrl.addComment);
+    router.post('/posts/:id/comments', requirePortalAuth, validate(commentSchema), portalCtrl.addComment);
     router.delete('/comments/:id', requirePortalAuth, portalCtrl.deleteComment);
 
     // Photo Gallery
