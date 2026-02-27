@@ -3,6 +3,16 @@ const express = require('express');
 const router = express.Router();
 const portalCtrl = require('../controllers/portalController');
 const { requirePortalAuth } = require('../middleware/portalAuth');
+const rateLimit = require('express-rate-limit');
+const validate = require('../middleware/validate');
+const { portalLoginSchema, portalVerifyOtpSchema, portalVerifyOtplessSchema } = require('../validators/portalValidators');
+
+// Specific rate limit for login attempts to prevent brute force/OTP enumeration
+const loginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // Limit each IP to 10 login requests per window
+    message: { success: false, message: 'Too many login attempts from this IP, please try again after 15 minutes' }
+});
 
 /**
  * Factory function — receives multer instance from app.js
@@ -10,8 +20,10 @@ const { requirePortalAuth } = require('../middleware/portalAuth');
 module.exports = (upload) => {
 
     // ── Public routes (no auth) ──
-    router.post('/login', portalCtrl.login);
-    router.post('/login/verify-otp', portalCtrl.verifyOtp);
+    router.post('/login', loginRateLimiter, validate({ body: portalLoginSchema }), portalCtrl.login);
+    router.post('/login/verify-otp', loginRateLimiter, validate({ body: portalVerifyOtpSchema }), portalCtrl.verifyOtp);
+    // NEW: OTP-less verify token route
+    router.post('/login/otpless', loginRateLimiter, validate({ body: portalVerifyOtplessSchema }), portalCtrl.verifyOtplessToken);
 
     // ── Protected routes (require member portal JWT) ──
 
@@ -27,8 +39,13 @@ module.exports = (upload) => {
     router.post('/members/:id/photo', requirePortalAuth, upload.single('photo'), portalCtrl.uploadProfilePhoto);
     router.delete('/members/:id/photo', requirePortalAuth, portalCtrl.deleteProfilePhoto);
 
+    // Initialize apicache for high-volume read endpoints
+    const apicache = require('apicache');
+    const cache = apicache.middleware;
+
     // Community Posts (Feed)
-    router.get('/posts', requirePortalAuth, portalCtrl.getPosts);
+    // Cache feed posts for 1 minute
+    router.get('/posts', requirePortalAuth, cache('1 minute'), portalCtrl.getPosts);
     router.post('/posts', requirePortalAuth, upload.array('images', 10), portalCtrl.createPost);
     router.put('/posts/:id', requirePortalAuth, portalCtrl.editPost);
     router.delete('/posts/:id', requirePortalAuth, portalCtrl.deletePost);
@@ -53,7 +70,8 @@ module.exports = (upload) => {
     router.get('/subscriptions', requirePortalAuth, portalCtrl.getSubscriptions);
 
     // Members directory
-    router.get('/members', requirePortalAuth, portalCtrl.getMembers);
+    // Cache the member directory for 5 minutes (invalidates on member changes usually, but this is a broad cache)
+    router.get('/members', requirePortalAuth, cache('5 minutes'), portalCtrl.getMembers);
     router.get('/members/:id', requirePortalAuth, portalCtrl.getMemberById);
 
     // Notifications

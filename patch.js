@@ -44,7 +44,7 @@ data = data.replace(
 );
 
 data = data.replace(
-    /const handleCreateAlbum = \(\) => \{[\s\S]*?toast\.success\('Album created!'\);\n    \};/,
+    /const handleCreateAlbum = \(\) => \{[\s\S]*?toast\.success\('Album created!'\);\n {4}\};/,
     `const handleCreateAlbum = async () => {
         if (!newAlbumTitle.trim()) { toast.error('Please enter an album title'); return; }
         try {
@@ -82,7 +82,7 @@ data = data.replace(
 );
 
 data = data.replace(
-    /const handleDeleteAlbum = \(albumId: string\) => \{[\s\S]*?toast\.success\('Album deleted'\);\n    \};/,
+    /const handleDeleteAlbum = \(albumId: string\) => \{[\s\S]*?toast\.success\('Album deleted'\);\n {4}\};/,
     `const handleDeleteAlbum = async (albumId: string) => {
         if(!confirm('Are you sure you want to delete this album?')) return;
         try {
@@ -103,7 +103,7 @@ data = data.replace(
 );
 
 data = data.replace(
-    /const handleAddPhoto = \(albumId: string, e: React\.ChangeEvent<HTMLInputElement>\) => \{[\s\S]*?e\.target\.value = '';\n    \};/,
+    /const handleAddPhoto = \(albumId: string, e: React\.ChangeEvent<HTMLInputElement>\) => \{[\s\S]*?e\.target\.value = '';\n {4}\};/,
     `const handleAddPhoto = async (albumId: string, e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
         if (files.length === 0) return;
@@ -177,7 +177,7 @@ eventsData = eventsData.replace(
 );
 
 eventsData = eventsData.replace(
-    /const handleCreate = \(\) => \{[\s\S]*?toast\.success\('Family event created!'\);\n    \};/,
+    /const handleCreate = \(\) => \{[\s\S]*?toast\.success\('Family event created!'\);\n {4}\};/,
     `const handleCreate = async () => {
         if (!form.title.trim() || !form.date) { toast.error('Title and date are required'); return; }
         try {
@@ -203,7 +203,7 @@ eventsData = eventsData.replace(
 );
 
 eventsData = eventsData.replace(
-    /const handleRSVP = \(eventId: string\) => \{[\s\S]*?\}\)\);\n    \};/,
+    /const handleRSVP = \(eventId: string\) => \{[\s\S]*?\}\)\);\n {4}\};/,
     `const handleRSVP = async (eventId: string) => {
         try {
             const res = await fetch(\`http://localhost:5000/api/portal/family/events/\${eventId}/rsvp\`, {
@@ -225,7 +225,7 @@ eventsData = eventsData.replace(
 );
 
 eventsData = eventsData.replace(
-    /const handleDelete = \(eventId: string\) => \{[\s\S]*?toast\.success\('Event deleted'\);\n    \};/,
+    /const handleDelete = \(eventId: string\) => \{[\s\S]*?toast\.success\('Event deleted'\);\n {4}\};/,
     `const handleDelete = async (eventId: string) => {
         if(!confirm('Delete this event?')) return;
         try {
@@ -285,7 +285,7 @@ accountsData = accountsData.replace(
 );
 
 accountsData = accountsData.replace(
-    /const handleCreate = \(\) => \{[\s\S]*?toast\.success\(`Account created for \$\{form\.name\}!`\);\n    \};/,
+    /const handleCreate = \(\) => \{[\s\S]*?toast\.success\(`Account created for \$\{form\.name\}!`\);\n {4}\};/,
     `const handleCreate = async () => {
         if (!form.name.trim() || !form.username.trim() || !form.password.trim()) {
             toast.error('All fields are required');
@@ -321,7 +321,7 @@ accountsData = accountsData.replace(
 );
 
 accountsData = accountsData.replace(
-    /const toggleActive = \(accountId: string\) => \{[\s\S]*?toast\.success\(.*?\);\n    \};/,
+    /const toggleActive = \(accountId: string\) => \{[\s\S]*?toast\.success\(.*?\);\n {4}\};/,
     `const toggleActive = async (accountId: string) => {
         const acc = accounts.find(a => a.id === accountId);
         try {
@@ -344,7 +344,7 @@ accountsData = accountsData.replace(
 );
 
 accountsData = accountsData.replace(
-    /const deleteAccount = \(accountId: string\) => \{[\s\S]*?toast\.success\(.*?\);\n    \};/,
+    /const deleteAccount = \(accountId: string\) => \{[\s\S]*?toast\.success\(.*?\);\n {4}\};/,
     `const deleteAccount = async (accountId: string) => {
         if(!confirm('Are you sure you want to delete this account?')) return;
         try {

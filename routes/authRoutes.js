@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const AuthController = require('../controllers/authController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireAuthSuperAdmin } = require('../middleware/auth');
+const validate = require('../middleware/validate');
+const { adminLoginSchema, registerAdminSchema } = require('../validators/authValidators');
 
 // Public routes
-router.post('/login', AuthController.login);
-router.post('/register', AuthController.register); // Can be protected later
+router.post('/login', validate({ body: adminLoginSchema }), AuthController.login);
+
+// Protected routes (Only Super Admin can register new users/admins)
+router.post('/register', requireAuthSuperAdmin, validate({ body: registerAdminSchema }), AuthController.register);
 
 // Protected routes (require auth, but some require only temp token)
 router.post('/mfa/setup', requireAuth, AuthController.setupMfa);

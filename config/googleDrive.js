@@ -43,10 +43,11 @@ if (process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_CLIENT_ID) {
 
 /**
  * Uploads a file (Buffer or on-disk) to Google Drive, makes it public,
- * and returns a direct link.
+ * and returns a direct link. Automatically optimizes images to WebP.
  *
  * @param {object} file Multer file object
  * @param {string} file.originalname
+ * @param {string} file.mimetype
  * @param {Buffer} [file.buffer]
  * @param {string} [file.path]
  * @returns {Promise<string>} public URL
@@ -56,19 +57,38 @@ async function uploadFile(file) {
     throw new Error('Invalid file object passed to uploadFile');
   }
 
-  // Create a readable stream from Buffer or from disk
-  let stream;
-  if (file.buffer) {
-    stream = Readable.from(file.buffer);
+  let finalBuffer;
+  let finalMimeType = file.mimetype || mime.lookup(file.originalname) || 'application/octet-stream';
+  let finalOriginalName = file.originalname;
+
+  // 1. Image Optimization Pipeline (Sharp)
+  if (finalMimeType.startsWith('image/')) {
+    const sharp = require('sharp');
+
+    // Convert regardless if it is buffer or file path
+    const input = file.buffer ? file.buffer : file.path;
+
+    finalBuffer = await sharp(input)
+      .resize({ width: 1080, withoutEnlargement: true }) // Downscale large images
+      .webp({ quality: 80 }) // Compress and convert to webp architecture
+      .toBuffer();
+
+    finalMimeType = 'image/webp';
+    finalOriginalName = finalOriginalName.replace(/\.[^/.]+$/, "") + ".webp";
+  } else if (file.buffer) {
+    finalBuffer = file.buffer;
   } else if (file.path) {
-    stream = fs.createReadStream(file.path);
+    finalBuffer = fs.readFileSync(file.path);
   } else {
     throw new Error('Invalid file object passed to uploadFile');
   }
 
-  // 1. Upload to Drive
+  // Create a readable stream from the final Buffer
+  const stream = Readable.from(finalBuffer);
+
+  // 2. Upload to Drive
   const createReqBody = {
-    name: file.originalname,
+    name: finalOriginalName,
   };
 
   if (FOLDER_ID) {
@@ -78,7 +98,7 @@ async function uploadFile(file) {
   const res = await drive.files.create({
     requestBody: createReqBody,
     media: {
-      mimeType: mime.lookup(file.originalname) || 'application/octet-stream',
+      mimeType: finalMimeType,
       body: stream
     },
     fields: 'id'
