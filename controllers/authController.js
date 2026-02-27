@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const UserModel = require('../models/userModel');
-const { sendLoginAlert } = require('../utils/emailService');
+const {
+  sendLoginAlert
+} = require('../utils/emailService');
 
 // JWT secret key - should be in environment variables
 if (!process.env.JWT_SECRET) {
@@ -8,15 +10,16 @@ if (!process.env.JWT_SECRET) {
   console.warn("⚠️  Using fallback secret for development only.");
   console.warn("⚠️  Please add JWT_SECRET to your .env file for production!");
 }
-
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
-
 class AuthController {
   // Login
-  static async login(req, res) {
+  static async login(req, res, next) {
     try {
-      const { username, password } = req.body;
+      const {
+        username,
+        password
+      } = req.body;
 
       // Validate input
       if (!username || !password) {
@@ -48,15 +51,14 @@ class AuthController {
       // MFA implementation
       if (user.is_mfa_active) {
         // Just return a token indicating MFA is needed
-        const mfaToken = jwt.sign(
-          {
-            id: user.id,
-            username: user.username,
-            role: user.role,
-            is_mfa_pending: true
-          },
-          JWT_SECRET,
-          { expiresIn: '5m' } // Short lived token
+        const mfaToken = jwt.sign({
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          is_mfa_pending: true
+        }, JWT_SECRET, {
+          expiresIn: '5m'
+        } // Short lived token
         );
         return res.json({
           success: true,
@@ -68,11 +70,14 @@ class AuthController {
 
       // If MFA is not active, but the user is an admin, force them to set it up!
       if (!user.is_mfa_active && (user.role === 'admin' || user.role === 'super_admin')) {
-        const tempToken = jwt.sign(
-          { id: user.id, username: user.username, role: user.role, mfa_setup_pending: true },
-          JWT_SECRET,
-          { expiresIn: '15m' }
-        );
+        const tempToken = jwt.sign({
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          mfa_setup_pending: true
+        }, JWT_SECRET, {
+          expiresIn: '15m'
+        });
         return res.json({
           success: true,
           mfa_setup_required: true,
@@ -80,22 +85,19 @@ class AuthController {
           message: 'MFA setup required'
         });
       }
-
       console.log('✅ Login successful for user:', username);
 
       // Update last login
       await UserModel.updateLastLogin(user.id);
 
       // Generate JWT token
-      const token = jwt.sign(
-        {
-          id: user.id,
-          username: user.username,
-          role: user.role
-        },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRES_IN }
-      );
+      const token = jwt.sign({
+        id: user.id,
+        username: user.username,
+        role: user.role
+      }, JWT_SECRET, {
+        expiresIn: JWT_EXPIRES_IN
+      });
 
       // Return success response
       res.json({
@@ -110,17 +112,18 @@ class AuthController {
       });
     } catch (error) {
       console.error('Login error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error'
-      });
+      next(error);
     }
   }
 
   // Register new user (admin only)
-  static async register(req, res) {
+  static async register(req, res, next) {
     try {
-      const { username, password, role } = req.body;
+      const {
+        username,
+        password,
+        role
+      } = req.body;
 
       // Validate input
       if (!username || !password) {
@@ -131,7 +134,8 @@ class AuthController {
       }
 
       // Validate password strength
-      if (password.length < 8) { // Increased to 8 for security
+      if (password.length < 8) {
+        // Increased to 8 for security
         return res.status(400).json({
           success: false,
           message: 'Password must be at least 8 characters long'
@@ -140,7 +144,6 @@ class AuthController {
 
       // Create user
       const newUser = await UserModel.create(username, password, role || 'user');
-
       res.status(201).json({
         success: true,
         message: 'User registered successfully',
@@ -157,17 +160,13 @@ class AuthController {
           message: 'Username already exists'
         });
       }
-
       console.error('Registration error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error'
-      });
+      next(error);
     }
   }
 
   // Verify token (for testing)
-  static async verifyToken(req, res) {
+  static async verifyToken(req, res, next) {
     try {
       // Token is already verified by middleware
       res.json({
@@ -176,25 +175,20 @@ class AuthController {
         user: req.user
       });
     } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error'
-      });
+      next(error);
     }
   }
 
   // Get current user info
-  static async getCurrentUser(req, res) {
+  static async getCurrentUser(req, res, next) {
     try {
       const user = await UserModel.findById(req.user.id);
-
       if (!user) {
         return res.status(404).json({
           success: false,
           message: 'User not found'
         });
       }
-
       res.json({
         success: true,
         user: {
@@ -206,15 +200,12 @@ class AuthController {
       });
     } catch (error) {
       console.error('Get current user error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error'
-      });
+      next(error);
     }
   }
 
   // Notify login - called by UI after successful login to send email alert
-  static async notifyLogin(req, res) {
+  static async notifyLogin(req, res, next) {
     try {
       // This endpoint should be called with the user info and token
       const user = req.user; // From auth middleware
@@ -234,38 +225,37 @@ class AuthController {
           message: 'Login notification sent'
         });
       }
-
       res.json({
         success: true,
         message: 'No notification required for non-admin users'
       });
     } catch (error) {
       console.error('Notify login error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to send notification'
-      });
+      next(error);
     }
   }
 
   // --- MFA Logic ---
-  static async setupMfa(req, res) {
+  static async setupMfa(req, res, next) {
     try {
       const user = req.user;
-      if (!user.id) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
+      if (!user.id) return res.status(401).json({
+        success: false,
+        message: 'Unauthorized'
+      });
       const speakeasy = require('speakeasy');
       const qrcode = require('qrcode');
-
       const secret = speakeasy.generateSecret({
         name: `PandaraSamaja (${user.username})`
       });
 
       // Save secret to user
       await UserModel.updateMfaSecret(user.id, secret.base32);
-
       qrcode.toDataURL(secret.otpauth_url, (err, data_url) => {
-        if (err) return res.status(500).json({ success: false, message: 'QR Generate Error' });
+        if (err) return res.status(500).json({
+          success: false,
+          message: 'QR Generate Error'
+        });
         res.json({
           success: true,
           secret: secret.base32,
@@ -274,22 +264,26 @@ class AuthController {
       });
     } catch (e) {
       console.error(e);
-      res.status(500).json({ success: false, message: 'MFA setup failed' });
+      next(e);
     }
   }
-
-  static async verifyMfa(req, res) {
+  static async verifyMfa(req, res, next) {
     try {
       const user = req.user; // user from the temp token
-      const { code } = req.body;
-
-      if (!code) return res.status(400).json({ success: false, message: 'Code is required' });
-
+      const {
+        code
+      } = req.body;
+      if (!code) return res.status(400).json({
+        success: false,
+        message: 'Code is required'
+      });
       const dbUser = await UserModel.findById(user.id);
       if (!dbUser || !dbUser.mfa_secret) {
-        return res.status(400).json({ success: false, message: 'MFA not configured' });
+        return res.status(400).json({
+          success: false,
+          message: 'MFA not configured'
+        });
       }
-
       const speakeasy = require('speakeasy');
       const verified = speakeasy.totp.verify({
         secret: dbUser.mfa_secret,
@@ -297,7 +291,6 @@ class AuthController {
         token: code,
         window: 1 // Allow 30 seconds drift either way
       });
-
       if (verified) {
         // If they were setting it up, activate it
         if (!dbUser.is_mfa_active) {
@@ -306,17 +299,13 @@ class AuthController {
 
         // Full login!
         await UserModel.updateLastLogin(user.id);
-
-        const token = jwt.sign(
-          {
-            id: dbUser.id,
-            username: dbUser.username,
-            role: dbUser.role
-          },
-          JWT_SECRET,
-          { expiresIn: JWT_EXPIRES_IN }
-        );
-
+        const token = jwt.sign({
+          id: dbUser.id,
+          username: dbUser.username,
+          role: dbUser.role
+        }, JWT_SECRET, {
+          expiresIn: JWT_EXPIRES_IN
+        });
         return res.json({
           success: true,
           message: 'MFA Verified, Login successful',
@@ -328,13 +317,15 @@ class AuthController {
           }
         });
       } else {
-        return res.status(401).json({ success: false, message: 'Invalid MFA Code' });
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid MFA Code'
+        });
       }
     } catch (e) {
       console.error(e);
-      res.status(500).json({ success: false, message: 'MFA verification failed' });
+      next(e);
     }
   }
 }
-
 module.exports = AuthController;

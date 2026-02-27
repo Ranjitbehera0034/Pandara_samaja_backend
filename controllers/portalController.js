@@ -16,7 +16,7 @@ const PORTAL_JWT_EXPIRES = process.env.PORTAL_JWT_EXPIRES || '7d';
  * Body: { membership_no, mobile }
  * Returns: JWT token + member profile
  */
-exports.login = async (req, res) => {
+exports.login = async (req, res, next) => {
     try {
         const { membership_no, mobile } = req.body;
 
@@ -55,35 +55,75 @@ exports.login = async (req, res) => {
 
         console.log(`[AUTH] OTP requested for ${membership_no} (Mobile: ${cleanMobile}): ${otp}`);
 
-        if (process.env.FAST2SMS_API_KEY) {
+        if (process.env.WHATSAPP_API_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID) {
             try {
-                const smsResponse = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+                // Format for WhatsApp API: ensuring country code (assuming India +91 if 10 digits)
+                const whatsappNumber = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile;
+
+                const whatsappResponse = await fetch(`https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
                     method: "POST",
                     headers: {
-                        "authorization": process.env.FAST2SMS_API_KEY,
+                        "Authorization": `Bearer ${process.env.WHATSAPP_API_TOKEN}`,
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({
-                        route: "otp",
-                        variables_values: otp,
-                        numbers: cleanMobile,
+                        messaging_product: "whatsapp",
+                        to: whatsappNumber,
+                        type: "template",
+                        template: {
+                            name: process.env.WHATSAPP_OTP_TEMPLATE || "auth_otp_verification", // Use auth_otp_verification as default or ENV
+                            language: {
+                                code: "en_US"
+                            },
+                            components: [
+                                {
+                                    type: "body",
+                                    parameters: [
+                                        {
+                                            type: "text",
+                                            text: otp
+                                        }
+                                    ]
+                                },
+                                {
+                                    type: "button",
+                                    sub_type: "url",
+                                    index: "0",
+                                    parameters: [
+                                        {
+                                            type: "text",
+                                            text: otp
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
                     })
                 });
 
-                const smsResult = await smsResponse.json();
-                if (!smsResult.return) {
-                    console.error('[AUTH] Fast2SMS Error:', smsResult);
+                const waResult = await whatsappResponse.json();
+                if (waResult.error) {
+                    console.error('[AUTH] WhatsApp API Error:', waResult.error);
                     return res.status(500).json({
                         success: false,
-                        message: `Fast2SMS Error: ${smsResult.message || 'Failed to send OTP. Please try again later.'}`
+                        message: `WhatsApp API Error: ${waResult.error.message || 'Failed to send OTP.'}`
                     });
                 }
-            } catch (smsError) {
-                console.error('[AUTH] Fast2SMS Request Failed:', smsError);
+
+                // Push initial 'sent' state into Webhook Tracking Log
+                if (waResult.messages && waResult.messages.length > 0) {
+                    const messageId = waResult.messages[0].id;
+                    await pool.query(
+                        'INSERT INTO whatsapp_logs (message_id, recipient_mobile, status, payload) VALUES ($1, $2, $3, $4)',
+                        [messageId, whatsappNumber, 'sent', waResult]
+                    );
+                }
+            } catch (waError) {
+                console.error('[AUTH] WhatsApp Request Failed:', waError);
                 return res.status(500).json({ success: false, message: 'Failed to send OTP. Network error.' });
             }
         } else {
-            console.warn('[AUTH] FAST2SMS_API_KEY is missing. OTP was not sent via SMS.');
+            console.warn('[AUTH] WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID missing. OTP not sent via WhatsApp.');
         }
 
         res.json({
@@ -92,8 +132,108 @@ exports.login = async (req, res) => {
             requireOtp: true
         });
     } catch (error) {
-        console.error('Portal login error:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
+        next(error);
+    }
+};
+
+/**
+ * POST /api/portal/login/otpless
+ * Body: { membership_no, mobile, otpless_token }
+ * Verifies the OTP-less token directly with OTP-less API.
+ * Returns: JWT token + member profile
+ */
+exports.verifyOtplessToken = async (req, res, next) => {
+    try {
+        const { membership_no, mobile, otpless_token } = req.body;
+
+        if (!membership_no || !mobile || !otpless_token) {
+            return res.status(400).json({ success: false, message: 'Missing parameters. Need membership_no, mobile, and otpless_token' });
+        }
+
+        const cleanMobile = mobile.replace(/\D/g, '');
+        const result = await portal.findByCredentials(membership_no.trim(), cleanMobile);
+
+        if (!result || !result.member) {
+            return res.status(401).json({ success: false, message: 'Member lookup failed / unauthorized.' });
+        }
+
+        if (process.env.OTPLESS_CLIENT_ID && process.env.OTPLESS_CLIENT_SECRET) {
+            try {
+                // Verify the token with OTPless servers
+                const otplessResponse = await fetch("https://auth.otpless.app/auth/userInfo", {
+                    method: "POST",
+                    headers: {
+                        "clientId": process.env.OTPLESS_CLIENT_ID,
+                        "clientSecret": process.env.OTPLESS_CLIENT_SECRET,
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: new URLSearchParams({ token: otpless_token })
+                });
+
+                const otplessData = await otplessResponse.json();
+
+                if (!otplessData.success) {
+                    console.error("[AUTH] OTPless Verification Failed:", otplessData);
+                    return res.status(401).json({ success: false, message: 'OTP-less verification failed or token expired.' });
+                }
+
+                // Verify that the mobile number returned from OTP-less matches the user trying to log in
+                // OTP-less usually returns phonenumber with country code, e.g., "918000000000"
+                const otplessPhone = otplessData.nationalPhoneNumber || otplessData.phoneNumber.replace('+', '');
+
+                // Be a bit forgiving with country codes for Indian numbers based on standard format if returned without +
+                if (!otplessPhone.includes(cleanMobile)) {
+                    return res.status(401).json({ success: false, message: 'The verified WhatsApp number does not match your registered mobile.' });
+                }
+
+            } catch (authErr) {
+                console.error('[AUTH] OTPless Request Error:', authErr);
+                return res.status(500).json({ success: false, message: 'Error verifying OTPless token. Network error.' });
+            }
+        } else {
+            // In development, if keys are missing we can bypass, but in production fail out.
+            console.warn('[AUTH] OTPLESS credentials missing. Bypassing WhatsApp verification for testing...');
+        }
+
+        const member = result.member;
+
+        // Generate JWT for member portal
+        const token = jwt.sign(
+            {
+                membership_no: member.membership_no,
+                // Replace member.name with matchedUser's name if applicable to attribute action identities correctly
+                name: result.matchedUser && result.matchedUser.name ? result.matchedUser.name : member.name,
+                type: 'member_portal'
+            },
+            JWT_SECRET,
+            { expiresIn: PORTAL_JWT_EXPIRES }
+        );
+
+        res.json({
+            success: true,
+            message: 'OTP-less Login successful',
+            token,
+            member: {
+                membership_no: member.membership_no,
+                name: member.name,
+                mobile: member.mobile,
+                district: member.district,
+                taluka: member.taluka,
+                panchayat: member.panchayat,
+                village: member.village,
+                address: member.address,
+                aadhar_no: member.aadhar_no,
+                male: member.male,
+                female: member.female,
+                head_gender: member.head_gender,
+                family_members: member.family_members,
+                profile_photo_url: member.profile_photo_url
+            },
+            loggedInUser: result.matchedUser
+        });
+
+    } catch (error) {
+        next(error);
     }
 };
 

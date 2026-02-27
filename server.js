@@ -1,0 +1,165 @@
+const { app, allowedOrigins } = require("./app");
+
+/* ─── 4. Start server ─────────────────────────────────────── */
+const PORT = process.env.PORT || 5000;
+const server = app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`📍 API Base URL: http://localhost:${PORT}/api/v1`);
+  console.log(`⚠️  SECURITY: Change default admin password immediately!`);
+});
+
+// Initialize Socket.io
+const io = require('socket.io')(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ["GET", "POST"]
+  }
+});
+
+// Attach io to app so it can be used in routes/controllers
+app.set('io', io);
+
+// Track online users: { membership_no: Set<socketId> }
+const onlineUsers = new Map();
+
+io.on('connection', (socket) => {
+  console.log('🔌 Socket connected:', socket.id);
+
+  // ─── Join Chat ───
+  // Client sends: { userId: membership_no }
+  socket.on('join_chat', ({ userId }) => {
+    if (!userId) return;
+    socket.userId = userId;
+
+    // Track online status
+    if (!onlineUsers.has(userId)) {
+      onlineUsers.set(userId, new Set());
+    }
+    onlineUsers.get(userId).add(socket.id);
+
+    // Join a personal room for direct messages
+    socket.join(`user:${userId}`);
+
+    // Broadcast online status
+    io.emit('user_online', { userId });
+
+    console.log(`👤 User ${userId} joined (${onlineUsers.get(userId).size} connections)`);
+  });
+
+  // ─── Send Message (real-time + persist) ───
+  socket.on('send_message', async ({ senderId, receiverId, content, type }) => {
+    if (!senderId || !receiverId || !content) return;
+
+    try {
+      const portal = require('./models/portalModel');
+
+      // Persist to database
+      const savedMsg = await portal.saveMessage(senderId, receiverId, content.trim(), type || 'text');
+
+      // Get sender info for the message payload
+      const senderProfile = await portal.getMemberProfile(senderId);
+
+      const messagePayload = {
+        id: savedMsg.id.toString(),
+        senderId: savedMsg.sender_id,
+        senderName: senderProfile?.name || 'Unknown',
+        senderAvatar: senderProfile?.profile_photo_url || null,
+        receiverId: savedMsg.receiver_id,
+        content: savedMsg.content,
+        timestamp: savedMsg.created_at,
+        read: false,
+        type: savedMsg.type
+      };
+
+      // Send to receiver's room
+      io.to(`user:${receiverId}`).emit('receive_message', messagePayload);
+
+      // Also echo back to sender (confirmation)
+      socket.emit('message_sent', messagePayload);
+
+      // Create a notification for the receiver
+      try {
+        await portal.createNotification(
+          receiverId,
+          'message',
+          senderId,
+          `sent you a message`,
+          null
+        );
+        // Push notification count update to receiver
+        const unread = await portal.getUnreadNotificationCount(receiverId);
+        io.to(`user:${receiverId}`).emit('notification_count', { count: unread });
+      } catch (notifErr) {
+        console.error('Notification error:', notifErr);
+      }
+
+    } catch (error) {
+      console.error('Send message error:', error);
+      socket.emit('message_error', { error: 'Failed to send message' });
+    }
+  });
+
+  // ─── Typing indicators ───
+  socket.on('typing_start', ({ senderId, receiverId }) => {
+    io.to(`user:${receiverId}`).emit('typing_start', { senderId });
+  });
+
+  socket.on('typing_stop', ({ senderId, receiverId }) => {
+    io.to(`user:${receiverId}`).emit('typing_stop', { senderId });
+  });
+
+  // ─── Mark messages as read ───
+  socket.on('mark_read', async ({ readerId, senderId }) => {
+    try {
+      const portal = require('./models/portalModel');
+      await portal.markMessagesRead(readerId, senderId);
+      // Notify sender that their messages were read
+      io.to(`user:${senderId}`).emit('messages_read', { readerId });
+    } catch (err) {
+      console.error('Mark read error:', err);
+    }
+  });
+
+  // ─── Get online status ───
+  socket.on('get_online_users', () => {
+    const online = Array.from(onlineUsers.keys());
+    socket.emit('online_users', online);
+  });
+
+  // ─── Disconnect ───
+  socket.on('disconnect', () => {
+    const userId = socket.userId;
+    if (userId && onlineUsers.has(userId)) {
+      onlineUsers.get(userId).delete(socket.id);
+      if (onlineUsers.get(userId).size === 0) {
+        onlineUsers.delete(userId);
+        // Broadcast offline status
+        io.emit('user_offline', { userId });
+      }
+    }
+    console.log('🔌 Socket disconnected:', socket.id);
+  });
+});
+
+// Handle server errors
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ ERROR: Port ${PORT} is already in use!`);
+    console.error(`💡 Solution: Kill the existing process or use a different port:`);
+    console.error(`   - Kill existing: lsof -ti:${PORT} | xargs kill`);
+    console.error(`   - Use different port: PORT=5001 npm start`);
+    process.exit(1);
+  } else {
+    console.error('❌ Server error:', error);
+    process.exit(1);
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('👋 SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
