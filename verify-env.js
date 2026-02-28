@@ -1,5 +1,5 @@
 require('dotenv').config();
-const fetch = require('node-fetch'); // Ensure node-fetch is available or use native fetch in Node 18+
+// global fetch available in Node 18+
 
 async function verifyEnvironment() {
     console.log('🚀 Starting Pandara Samaja Environment Verification...\n');
