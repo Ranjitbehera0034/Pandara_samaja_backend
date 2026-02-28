@@ -293,7 +293,7 @@ exports.toggleLike = async (postId, memberId) => {
         if (liked && authorId && authorId !== memberId) {
             // Get actor name
             const actorRes = await client.query('SELECT name FROM members WHERE membership_no = $1', [memberId]);
-            const actorName = actorRes.rows[0]?.name || 'Someone';
+            const _actorName = actorRes.rows[0]?.name || 'Someone';
             await client.query(
                 `INSERT INTO portal_notifications (recipient_id, actor_id, type, post_id, message) 
                  VALUES ($1, $2, 'like', $3, $4)`,
@@ -352,7 +352,7 @@ exports.addComment = async (postId, memberId, text, authorName) => {
         const authorId = postRes.rows[0]?.author_id;
 
         if (authorId && authorId !== memberId) {
-            const actorName = commentWithAuthor.rows[0].author_name || 'Someone';
+            const _actorName = commentWithAuthor.rows[0].author_name || 'Someone';
             // Limit text snippet
             const textSnippet = text.length > 30 ? text.substring(0, 30) + '...' : text;
             await client.query(
@@ -490,7 +490,7 @@ exports.toggleSubscription = async (followerId, followingId) => {
 
         // Notify
         const actorRes = await pool.query('SELECT name FROM members WHERE membership_no = $1', [followerId]);
-        const actorName = actorRes.rows[0]?.name || 'Someone';
+        const _actorName = actorRes.rows[0]?.name || 'Someone';
         await pool.query(
             `INSERT INTO portal_notifications (recipient_id, actor_id, type, message) 
              VALUES ($1, $2, 'follow', $3)`,

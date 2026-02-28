@@ -1,6 +1,5 @@
 const gDrive = require('../config/googleDrive');
 const model = require('../models/candidateModel');
-const fs = require('fs');
 
 // controller
 exports.getAll = async (req, res) => {
