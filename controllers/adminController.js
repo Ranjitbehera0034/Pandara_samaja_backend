@@ -189,7 +189,11 @@ exports.getAllCandidates = async (req, res, next) => {
     const query = `
             SELECT * FROM candidates 
             ORDER BY 
-                CASE WHEN status = 'pending' THEN 1 ELSE 2 END,
+                CASE 
+                    WHEN status = 'pending' THEN 1 
+                    WHEN status = 'verified' THEN 2
+                    ELSE 3 
+                END,
                 created_at DESC
         `;
     const result = await pool.query(query);
@@ -209,23 +213,25 @@ exports.updateCandidateStatus = async (req, res, next) => {
     const {
       candidateId
     } = req.params;
-    const {
-      status
-    } = req.body;
+    const { status } = req.body;
     const adminUsername = req.user ? req.user.username : 'admin';
+    const userRole = req.user ? req.user.role : 'admin';
 
     if (!['approved', 'pending', 'rejected'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid status'
-      });
+      return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+
+    let finalStatus = status;
+    // Maker-Checker Logic
+    if (status === 'approved' && userRole === 'admin') {
+      finalStatus = 'verified';
     }
 
     const result = await pool.query(
       `UPDATE candidates 
        SET status = $1, verified_by = $2, verified_at = CURRENT_TIMESTAMP 
        WHERE id = $3 RETURNING *`,
-      [status, adminUsername, candidateId]
+      [finalStatus, adminUsername, candidateId]
     );
 
     if (result.rowCount === 0) {
@@ -238,7 +244,13 @@ exports.updateCandidateStatus = async (req, res, next) => {
     const candidate = result.rows[0];
 
     // Notification Logic
-    if (status === 'approved') {
+    if (finalStatus === 'verified') {
+      // Notify Super Admin specifically
+      await logAdminAction(req, 'VERIFY_MATRIMONY', 'Candidate', candidateId, {
+        name: candidate.name,
+        verifiedBy: adminUsername
+      });
+    } else if (finalStatus === 'approved') {
       // 1. Notify Super Admin (via logAdminAction helper)
       await logAdminAction(req, 'APPROVE_MATRIMONY', 'Candidate', candidateId, {
         name: candidate.name

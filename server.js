@@ -26,45 +26,63 @@ io.on('connection', (socket) => {
   console.log('🔌 Socket connected:', socket.id);
 
   // ─── Join Chat ───
-  // Client sends: { userId: membership_no }
-  socket.on('join_chat', ({ userId }) => {
+  // Client sends: { userId: membership_no, mobile: string }
+  socket.on('join_chat', ({ userId, mobile }) => {
     if (!userId) return;
+    const cleanMobile = (mobile || '').replace(/\D/g, '');
     socket.userId = userId;
+    socket.userMobile = cleanMobile;
+
+    const sessionKey = `${userId}-${cleanMobile}`;
 
     // Track online status
-    if (!onlineUsers.has(userId)) {
-      onlineUsers.set(userId, new Set());
+    if (!onlineUsers.has(sessionKey)) {
+      onlineUsers.set(sessionKey, new Set());
     }
-    onlineUsers.get(userId).add(socket.id);
+    onlineUsers.get(sessionKey).add(socket.id);
 
     // Join a personal room for direct messages
-    socket.join(`user:${userId}`);
+    socket.join(`user:${sessionKey}`);
 
     // Broadcast online status
-    io.emit('user_online', { userId });
+    io.emit('user_online', { userId, mobile: cleanMobile });
 
-    console.log(`👤 User ${userId} joined (${onlineUsers.get(userId).size} connections)`);
+    console.log(`👤 User ${sessionKey} joined (${onlineUsers.get(sessionKey).size} connections)`);
   });
 
   // ─── Send Message (real-time + persist) ───
-  socket.on('send_message', async ({ senderId, receiverId, content, type }) => {
+  socket.on('send_message', async ({ senderId, senderMobile, receiverId, receiverMobile, content, type }) => {
     if (!senderId || !receiverId || !content) return;
 
     try {
       const portal = require('./models/portalModel');
+      const cleanSenderMobile = (senderMobile || '').replace(/\D/g, '');
+      const cleanReceiverMobile = (receiverMobile || '').replace(/\D/g, '');
 
       // Persist to database
-      const savedMsg = await portal.saveMessage(senderId, receiverId, content.trim(), type || 'text');
+      const savedMsg = await portal.saveMessage(senderId, cleanSenderMobile, receiverId, cleanReceiverMobile, content.trim(), type || 'text');
 
-      // Get sender info for the message payload
+      // Fetch correct sender name/avatar for individual identity
       const senderProfile = await portal.getMemberProfile(senderId);
+      let senderName = senderProfile?.name || 'Unknown';
+      let senderAvatar = senderProfile?.profile_photo_url || null;
+
+      if (senderProfile && cleanSenderMobile !== (senderProfile.mobile || '').replace(/\D/g, '')) {
+        const fm = (senderProfile.family_members || []).find(f => (f.mobile || '').replace(/\D/g, '') === cleanSenderMobile);
+        if (fm) {
+          senderName = fm.name;
+          if (fm.profile_photo_url) senderAvatar = fm.profile_photo_url;
+        }
+      }
 
       const messagePayload = {
         id: savedMsg.id.toString(),
         senderId: savedMsg.sender_id,
-        senderName: senderProfile?.name || 'Unknown',
-        senderAvatar: senderProfile?.profile_photo_url || null,
+        senderMobile: savedMsg.sender_mobile,
+        senderName,
+        senderAvatar,
         receiverId: savedMsg.receiver_id,
+        receiverMobile: savedMsg.receiver_mobile,
         content: savedMsg.content,
         timestamp: savedMsg.created_at,
         read: false,
@@ -72,7 +90,7 @@ io.on('connection', (socket) => {
       };
 
       // Send to receiver's room
-      io.to(`user:${receiverId}`).emit('receive_message', messagePayload);
+      io.to(`user:${receiverId}-${cleanReceiverMobile}`).emit('receive_message', messagePayload);
 
       // Also echo back to sender (confirmation)
       socket.emit('message_sent', messagePayload);
@@ -84,11 +102,14 @@ io.on('connection', (socket) => {
           'message',
           senderId,
           `sent you a message`,
-          null
+          null,
+          null, // actor_name (optional)
+          cleanReceiverMobile,
+          cleanSenderMobile
         );
         // Push notification count update to receiver
-        const unread = await portal.getUnreadNotificationCount(receiverId);
-        io.to(`user:${receiverId}`).emit('notification_count', { count: unread });
+        const unread = await portal.getUnreadNotificationCount(receiverId, cleanReceiverMobile);
+        io.to(`user:${receiverId}-${cleanReceiverMobile}`).emit('notification_count', { count: unread });
       } catch (notifErr) {
         console.error('Notification error:', notifErr);
       }
@@ -100,21 +121,23 @@ io.on('connection', (socket) => {
   });
 
   // ─── Typing indicators ───
-  socket.on('typing_start', ({ senderId, receiverId }) => {
-    io.to(`user:${receiverId}`).emit('typing_start', { senderId });
+  socket.on('typing_start', ({ senderId, senderMobile, receiverId, receiverMobile }) => {
+    io.to(`user:${receiverId}-${(receiverMobile || '').replace(/\D/g, '')}`).emit('typing_start', { senderId, senderMobile });
   });
 
-  socket.on('typing_stop', ({ senderId, receiverId }) => {
-    io.to(`user:${receiverId}`).emit('typing_stop', { senderId });
+  socket.on('typing_stop', ({ senderId, senderMobile, receiverId, receiverMobile }) => {
+    io.to(`user:${receiverId}-${(receiverMobile || '').replace(/\D/g, '')}`).emit('typing_stop', { senderId, senderMobile });
   });
 
   // ─── Mark messages as read ───
-  socket.on('mark_read', async ({ readerId, senderId }) => {
+  socket.on('mark_read', async ({ readerId, readerMobile, senderId, senderMobile }) => {
     try {
       const portal = require('./models/portalModel');
-      await portal.markMessagesRead(readerId, senderId);
+      const cleanReaderMobile = (readerMobile || '').replace(/\D/g, '');
+      const cleanSenderMobile = (senderMobile || '').replace(/\D/g, '');
+      await portal.markMessagesRead(readerId, cleanReaderMobile, senderId, cleanSenderMobile);
       // Notify sender that their messages were read
-      io.to(`user:${senderId}`).emit('messages_read', { readerId });
+      io.to(`user:${senderId}-${cleanSenderMobile}`).emit('messages_read', { readerId, readerMobile: cleanReaderMobile });
     } catch (err) {
       console.error('Mark read error:', err);
     }
@@ -129,12 +152,14 @@ io.on('connection', (socket) => {
   // ─── Disconnect ───
   socket.on('disconnect', () => {
     const userId = socket.userId;
-    if (userId && onlineUsers.has(userId)) {
-      onlineUsers.get(userId).delete(socket.id);
-      if (onlineUsers.get(userId).size === 0) {
-        onlineUsers.delete(userId);
+    const userMobile = socket.userMobile;
+    const sessionKey = `${userId}-${userMobile}`;
+    if (userId && onlineUsers.has(sessionKey)) {
+      onlineUsers.get(sessionKey).delete(socket.id);
+      if (onlineUsers.get(sessionKey).size === 0) {
+        onlineUsers.delete(sessionKey);
         // Broadcast offline status
-        io.emit('user_offline', { userId });
+        io.emit('user_offline', { userId, mobile: userMobile });
       }
     }
     console.log('🔌 Socket disconnected:', socket.id);

@@ -64,7 +64,7 @@ module.exports = (upload) => {
     router.delete('/photos/:id', requirePortalAuth, portalCtrl.deletePhoto);
 
     // Subscriptions (Follow / Unfollow)
-    router.post('/subscribe/:memberId', requirePortalAuth, portalCtrl.toggleSubscription);
+    router.post('/subscribe/:memberId{/:mobile}', requirePortalAuth, portalCtrl.toggleSubscription);
     router.get('/subscriptions', requirePortalAuth, portalCtrl.getSubscriptions);
 
     // Members directory
@@ -81,8 +81,8 @@ module.exports = (upload) => {
 
     // Chat (REST endpoints for history)
     router.get('/chat/contacts', requirePortalAuth, portalCtrl.getChatContacts);
-    router.get('/chat/conversation/:memberId', requirePortalAuth, portalCtrl.getConversation);
-    router.put('/chat/read/:memberId', requirePortalAuth, portalCtrl.markChatRead);
+    router.get('/chat/conversation/:memberId{/:mobile}', requirePortalAuth, portalCtrl.getConversation);
+    router.put('/chat/read/:memberId{/:mobile}', requirePortalAuth, portalCtrl.markChatRead);
 
     // ── Family Hub Routes (Phase 6) ──
     const familyCtrl = require('../controllers/familyController');
