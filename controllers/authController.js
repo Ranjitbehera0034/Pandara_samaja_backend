@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
 const UserModel = require('../models/userModel');
 const {
-  sendLoginAlert
+  sendLoginAlert,
+  sendPromotionNotification
 } = require('../utils/emailService');
 
 // JWT secret key - should be in environment variables
@@ -122,7 +123,10 @@ class AuthController {
       const {
         username,
         password,
-        role
+        role,
+        membership_no,
+        real_name,
+        email
       } = req.body;
 
       // Validate input
@@ -130,6 +134,14 @@ class AuthController {
         return res.status(400).json({
           success: false,
           message: 'Username and password are required'
+        });
+      }
+
+      // Requirement: Admins must be linked to a membership_no
+      if ((role === 'admin' || role === 'super_admin') && !membership_no) {
+        return res.status(400).json({
+          success: false,
+          message: 'Administrative accounts must be linked to a Membership Number'
         });
       }
 
@@ -142,15 +154,41 @@ class AuthController {
         });
       }
 
+      // Check if membership_no is already assigned to another admin
+      if (membership_no) {
+        const existingAdmin = await UserModel.findByMembershipNo(membership_no);
+        if (existingAdmin) {
+          return res.status(409).json({
+            success: false,
+            message: `Membership No. ${membership_no} is already assigned to admin @${existingAdmin.username}`
+          });
+        }
+      }
+
       // Create user
-      const newUser = await UserModel.create(username, password, role || 'user');
+      const newUser = await UserModel.create(username, password, role || 'user', membership_no, real_name, email);
+
+      // Trigger notification (Non-blocking)
+      if (membership_no && (role === 'admin' || role === 'super_admin')) {
+        const MemberModel = require('../models/memberModel');
+        MemberModel.getOne(membership_no).then(member => {
+          if (member) {
+            // Use the email provided in the request if member doesn't have one
+            const memberWithNewEmail = { ...member, email: email || member.email };
+            sendPromotionNotification(memberWithNewEmail, { username, role });
+          }
+        }).catch(err => console.error('Notify Error:', err));
+      }
+
       res.status(201).json({
         success: true,
         message: 'User registered successfully',
         user: {
           id: newUser.id,
           username: newUser.username,
-          role: newUser.role
+          role: newUser.role,
+          membership_no: newUser.membership_no,
+          real_name: newUser.real_name
         }
       });
     } catch (error) {
@@ -162,6 +200,33 @@ class AuthController {
       }
       console.error('Registration error:', error);
       next(error);
+    }
+  }
+
+  // Search members for admin assignment (Super Admin ONLY)
+  static async searchMembers(req, res, next) {
+    try {
+      const { query } = req.query;
+      if (!query || query.length < 2) {
+        return res.json({ success: true, members: [] });
+      }
+
+      const MemberModel = require('../models/memberModel');
+      const result = await MemberModel.search(query);
+
+      res.json({
+        success: true,
+        members: result.rows.map(m => ({
+          membership_no: m.membership_no,
+          name: m.name,
+          village: m.village,
+          district: m.district,
+          mobile: m.mobile
+        }))
+      });
+    } catch (e) {
+      console.error('Member search error:', e);
+      next(e);
     }
   }
 
@@ -324,6 +389,44 @@ class AuthController {
       }
     } catch (e) {
       console.error(e);
+      next(e);
+    }
+  }
+
+  // --- Admin Management (Super Admin ONLY) ---
+  static async getAllAdmins(req, res, next) {
+    try {
+      const users = await UserModel.getAllUsers();
+      res.json({
+        success: true,
+        users
+      });
+    } catch (e) {
+      console.error('Fetch admins error:', e);
+      next(e);
+    }
+  }
+
+  static async deleteAdmin(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      // Prevent self-deletion
+      if (Number(id) === req.user.id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete your own account'
+        });
+      }
+
+      await UserModel.delete(id);
+
+      res.json({
+        success: true,
+        message: 'Admin access revoked successfully'
+      });
+    } catch (e) {
+      console.error('Delete admin error:', e);
       next(e);
     }
   }

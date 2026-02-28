@@ -11,27 +11,36 @@ class UserModel {
     return result.rows[0] || null;
   }
 
+  // Find user by membership_no
+  static async findByMembershipNo(membershipNo) {
+    const result = await pool.query(
+      'SELECT * FROM users WHERE membership_no = $1',
+      [membershipNo]
+    );
+    return result.rows[0] || null;
+  }
+
   // Find user by ID
   static async findById(id) {
     const result = await pool.query(
-      'SELECT id, username, role, created_at, last_login, mfa_secret, is_mfa_active FROM users WHERE id = $1',
+      'SELECT id, username, role, membership_no, real_name, email, created_at, last_login, mfa_secret, is_mfa_active FROM users WHERE id = $1',
       [id]
     );
     return result.rows[0] || null;
   }
 
   // Create new user
-  static async create(username, password, role = 'user') {
+  static async create(username, password, role = 'user', membershipNo = null, realName = null, email = null) {
     try {
       // Hash password
       const saltRounds = 10;
       const password_hash = await bcrypt.hash(password, saltRounds);
 
       const result = await pool.query(
-        `INSERT INTO users (username, password_hash, role)
-         VALUES ($1, $2, $3)
-         RETURNING id, username, role, created_at`,
-        [username, password_hash, role]
+        `INSERT INTO users (username, password_hash, role, membership_no, real_name, email)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, username, role, membership_no, real_name, email, created_at`,
+        [username, password_hash, role, membershipNo, realName, email]
       );
 
       return result.rows[0];
@@ -85,6 +94,14 @@ class UserModel {
   static async activateMfa(userId) {
     await pool.query('UPDATE users SET is_mfa_active = true WHERE id = $1', [userId]);
     return true;
+  }
+
+  // Get all administrative users
+  static async getAllUsers() {
+    const result = await pool.query(
+      'SELECT id, username, role, membership_no, real_name, email, created_at, last_login, is_mfa_active FROM users ORDER BY created_at DESC'
+    );
+    return result.rows;
   }
 }
 
