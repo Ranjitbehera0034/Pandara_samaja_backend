@@ -3,6 +3,11 @@ node_modules/
 
 # environment variables / secrets
 .env
+firebase-service-account.json
+config/firebase-service-account.json
+
+# macOS junk
+.DS_Store
 
 # file uploads or other runtime artefacts
 uploads/
