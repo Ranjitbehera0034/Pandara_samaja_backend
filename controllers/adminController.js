@@ -212,22 +212,60 @@ exports.updateCandidateStatus = async (req, res, next) => {
     const {
       status
     } = req.body;
+    const adminUsername = req.user ? req.user.username : 'admin';
+
     if (!['approved', 'pending', 'rejected'].includes(status)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid status'
       });
     }
-    const result = await pool.query('UPDATE candidates SET status = $1 WHERE id = $2 RETURNING *', [status, candidateId]);
+
+    const result = await pool.query(
+      `UPDATE candidates 
+       SET status = $1, verified_by = $2, verified_at = CURRENT_TIMESTAMP 
+       WHERE id = $3 RETURNING *`,
+      [status, adminUsername, candidateId]
+    );
+
     if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
         message: 'Candidate not found'
       });
     }
+
+    const candidate = result.rows[0];
+
+    // Notification Logic
+    if (status === 'approved') {
+      // 1. Notify Super Admin (via logAdminAction helper)
+      await logAdminAction(req, 'APPROVE_MATRIMONY', 'Candidate', candidateId, {
+        name: candidate.name
+      });
+
+      // 2. Notify all community members
+      try {
+        const actorId = candidate.author_id || 'system';
+        const message = `A new matrimony profile for ${candidate.name} has been approved!`;
+
+        // Batch insert notifications for all approved members
+        await pool.query(`
+          INSERT INTO portal_notifications (recipient_id, actor_id, type, message)
+          SELECT membership_no, COALESCE($1, membership_no), 'system', $2 
+          FROM members 
+          WHERE status = 'approved' AND membership_no != $1
+        `, [actorId, message]);
+
+        console.log(`Global notification sent for matrimony profile: ${candidate.name}`);
+      } catch (notifErr) {
+        console.error('Failed to send global matrimony notifications:', notifErr);
+      }
+    }
+
     res.json({
       success: true,
-      candidate: result.rows[0],
+      candidate,
       message: `Candidate ${status}`
     });
   } catch (error) {

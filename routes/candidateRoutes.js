@@ -2,6 +2,7 @@
 const express = require('express');
 const controller = require('../controllers/candidateController');
 const { requireAuth } = require('../middleware/auth');
+const { requireAnyAuth } = require('../middleware/anyAuth');
 
 /**
  * Export a function so app.js can inject the configured
@@ -13,14 +14,14 @@ const { requireAuth } = require('../middleware/auth');
 module.exports = (upload) => {
   const router = express.Router();
 
-  // Public routes
-  router.get('/', controller.getAll);
-  router.get('/:id', controller.getOne);
+  // Public/Member Protected routes
+  router.get('/', requireAnyAuth, controller.getAll);
+  router.get('/:id', requireAnyAuth, controller.getOne);
 
   // Protected routes (require authentication)
-  router.post('/', requireAuth, upload.single('photo'), controller.create);
-  router.put('/:id', requireAuth, upload.single('photo'), controller.update);
-  router.put('/:id/match', requireAuth, controller.markMatched);
-  router.delete('/:id', requireAuth, controller.remove);
+  router.post('/', requireAnyAuth, upload.single('photo'), controller.create);
+  router.put('/:id', requireAnyAuth, upload.single('photo'), controller.update);
+  router.put('/:id/match', requireAnyAuth, controller.markMatched);
+  router.delete('/:id', requireAnyAuth, controller.remove);
   return router;
 };
