@@ -350,7 +350,8 @@ exports.getPosts = async (req, res) => {
         const posts = await portal.getPosts({
             page,
             limit,
-            membershipNo: req.portalMember.membership_no
+            membershipNo: req.portalMember.membership_no,
+            mobile: req.portalMember.mobile
         });
 
         // For each post, fetch comments
@@ -458,7 +459,8 @@ exports.toggleLike = async (req, res) => {
     try {
         const result = await portal.toggleLike(
             req.params.id,
-            req.portalMember.membership_no
+            req.portalMember.membership_no,
+            req.portalMember.mobile
         );
 
         // Notify connected clients
@@ -481,11 +483,13 @@ exports.toggleLike = async (req, res) => {
                         req.portalMember.membership_no,
                         'liked your post',
                         parseInt(req.params.id),
-                        req.portalMember.name
+                        req.portalMember.name,
+                        post.author_mobile,
+                        req.portalMember.mobile
                     );
                     if (io) {
-                        const count = await portal.getUnreadNotificationCount(post.author_id);
-                        io.to(`user:${post.author_id}`).emit('notification_count', { count });
+                        const count = await portal.getUnreadNotificationCount(post.author_id, post.author_mobile);
+                        io.to(`user:${post.author_id}-${post.author_mobile}`).emit('notification_count', { count });
                     }
                 }
             } catch (notifErr) {
@@ -576,11 +580,13 @@ exports.addComment = async (req, res) => {
                     member.membership_no,
                     `commented: "${preview}${text.trim().length > 50 ? '...' : ''}"`,
                     parseInt(req.params.id),
-                    member.name
+                    member.name,
+                    post.author_mobile,
+                    member.mobile
                 );
                 if (io) {
-                    const count = await portal.getUnreadNotificationCount(post.author_id);
-                    io.to(`user:${post.author_id}`).emit('notification_count', { count });
+                    const count = await portal.getUnreadNotificationCount(post.author_id, post.author_mobile);
+                    io.to(`user:${post.author_id}-${post.author_mobile}`).emit('notification_count', { count });
                 }
             }
         } catch (notifErr) {
@@ -745,25 +751,32 @@ exports.deletePhoto = async (req, res) => {
  */
 exports.toggleSubscription = async (req, res) => {
     try {
+        const targetId = req.params.memberId;
+        const targetMobile = req.params.mobile || ''; // Optional mobile for individual targeting
         const result = await portal.toggleSubscription(
             req.portalMember.membership_no,
-            req.params.memberId
+            req.portalMember.mobile,
+            targetId,
+            targetMobile
         );
 
         // Create notification on follow
         if (result.subscribed) {
             try {
                 await portal.createNotification(
-                    req.params.memberId,
+                    targetId,
                     'follow',
                     req.portalMember.membership_no,
                     'started following you',
-                    null
+                    null,
+                    req.portalMember.name,
+                    targetMobile,
+                    req.portalMember.mobile
                 );
                 const io = req.app.get('io');
                 if (io) {
-                    const count = await portal.getUnreadNotificationCount(req.params.memberId);
-                    io.to(`user:${req.params.memberId}`).emit('notification_count', { count });
+                    const count = await portal.getUnreadNotificationCount(targetId, targetMobile);
+                    io.to(`user:${targetId}-${targetMobile}`).emit('notification_count', { count });
                 }
             } catch (notifErr) {
                 console.error('Follow notification error:', notifErr);
@@ -790,7 +803,10 @@ exports.toggleSubscription = async (req, res) => {
  */
 exports.getSubscriptions = async (req, res) => {
     try {
-        const subscriptions = await portal.getSubscriptions(req.portalMember.membership_no);
+        const subscriptions = await portal.getSubscriptions(
+            req.portalMember.membership_no,
+            req.portalMember.mobile
+        );
         res.json({ success: true, subscriptions });
     } catch (error) {
         console.error('Get subscriptions error:', error);
@@ -805,7 +821,8 @@ exports.getSubscriptions = async (req, res) => {
 exports.getMembers = async (req, res) => {
     try {
         const members = await portal.getMembersWithSubscription(
-            req.portalMember.membership_no
+            req.portalMember.membership_no,
+            req.portalMember.mobile
         );
         res.json({ success: true, members });
     } catch (error) {
@@ -842,8 +859,14 @@ exports.getMemberById = async (req, res) => {
  */
 exports.getNotifications = async (req, res) => {
     try {
-        const notifications = await portal.getNotifications(req.portalMember.membership_no);
-        const unreadCount = await portal.getUnreadNotificationCount(req.portalMember.membership_no);
+        const notifications = await portal.getNotifications(
+            req.portalMember.membership_no,
+            req.portalMember.mobile
+        );
+        const unreadCount = await portal.getUnreadNotificationCount(
+            req.portalMember.membership_no,
+            req.portalMember.mobile
+        );
         res.json({ success: true, notifications, unreadCount });
     } catch (error) {
         console.error('Get notifications error:', error);
@@ -859,7 +882,8 @@ exports.markNotificationRead = async (req, res) => {
     try {
         const notif = await portal.markNotificationRead(
             req.params.id,
-            req.portalMember.membership_no
+            req.portalMember.membership_no,
+            req.portalMember.mobile
         );
         if (!notif) {
             return res.status(404).json({ success: false, message: 'Notification not found' });
@@ -877,7 +901,7 @@ exports.markNotificationRead = async (req, res) => {
  */
 exports.deleteNotification = async (req, res) => {
     try {
-        await portal.deleteNotification(req.params.id, req.portalMember.membership_no);
+        await portal.deleteNotification(req.params.id, req.portalMember.membership_no, req.portalMember.mobile);
         res.json({ success: true, message: 'Notification deleted' });
     } catch (error) {
         console.error('Delete notification error:', error);
@@ -891,7 +915,7 @@ exports.deleteNotification = async (req, res) => {
  */
 exports.markAllNotificationsRead = async (req, res) => {
     try {
-        await portal.markAllNotificationsRead(req.portalMember.membership_no);
+        await portal.markAllNotificationsRead(req.portalMember.membership_no, req.portalMember.mobile);
         res.json({ success: true, message: 'All notifications marked as read' });
     } catch (error) {
         console.error('Mark all read error:', error);
@@ -905,7 +929,7 @@ exports.markAllNotificationsRead = async (req, res) => {
  */
 exports.getUnreadCount = async (req, res) => {
     try {
-        const count = await portal.getUnreadNotificationCount(req.portalMember.membership_no);
+        const count = await portal.getUnreadNotificationCount(req.portalMember.membership_no, req.portalMember.mobile);
         res.json({ success: true, count });
     } catch (error) {
         console.error('Get unread count error:', error);
@@ -924,7 +948,7 @@ exports.getUnreadCount = async (req, res) => {
  */
 exports.getChatContacts = async (req, res) => {
     try {
-        const contacts = await portal.getChatContacts(req.portalMember.membership_no);
+        const contacts = await portal.getChatContacts(req.portalMember.membership_no, req.portalMember.mobile);
         res.json({ success: true, contacts });
     } catch (error) {
         console.error('Get chat contacts error:', error);
@@ -943,13 +967,20 @@ exports.getConversation = async (req, res) => {
 
         const messages = await portal.getConversation(
             req.portalMember.membership_no,
+            req.portalMember.mobile,
             req.params.memberId,
+            req.params.mobile || '',
             limit,
             offset
         );
 
-        // Mark messages from the other member as read
-        await portal.markMessagesRead(req.portalMember.membership_no, req.params.memberId);
+        // Mark messages from the other person as read
+        await portal.markMessagesRead(
+            req.portalMember.membership_no,
+            req.portalMember.mobile,
+            req.params.memberId,
+            req.params.mobile || ''
+        );
 
         res.json({ success: true, messages });
     } catch (error) {
@@ -964,7 +995,12 @@ exports.getConversation = async (req, res) => {
  */
 exports.markChatRead = async (req, res) => {
     try {
-        await portal.markMessagesRead(req.portalMember.membership_no, req.params.memberId);
+        await portal.markMessagesRead(
+            req.portalMember.membership_no,
+            req.portalMember.mobile,
+            req.params.memberId,
+            req.params.mobile || ''
+        );
         res.json({ success: true, message: 'Messages marked as read' });
     } catch (error) {
         console.error('Mark chat read error:', error);

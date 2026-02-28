@@ -171,26 +171,23 @@ exports.createPost = async ({ authorId, textContent, images, location, authorNam
     return res.rows[0];
 };
 
-/**
- * Get all posts (paginated) with author info and like/comment counts
- */
-exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null }) => {
+exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null, mobile = null }) => {
     const offset = (page - 1) * limit;
     const res = await pool.query(
         `SELECT p.*,
-            COALESCE(p.author_name, m.name) AS "authorName",
-            COALESCE(p.author_photo, m.profile_photo_url) AS "authorAvatar",
+            COALESCE(p.author_name, m.name) AS author_name,
+            COALESCE(p.author_photo, m.profile_photo_url) AS author_photo,
             m.village AS author_village,
             m.district AS author_district,
             EXISTS(
               SELECT 1 FROM portal_likes l
-              WHERE l.post_id = p.id AND l.member_id = $3
+              WHERE l.post_id = p.id AND l.member_id = $3 AND l.member_mobile = $4
             ) AS liked_by_me
      FROM portal_posts p
      JOIN members m ON m.membership_no = p.author_id
      ORDER BY p.created_at DESC
      LIMIT $1 OFFSET $2`,
-        [limit, offset, membershipNo || '']
+        [limit, offset, membershipNo || '', mobile || '']
     );
     return res.rows;
 };
@@ -198,21 +195,21 @@ exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null }) => {
 /**
  * Get single post with author data
  */
-exports.getPost = async (postId, membershipNo) => {
+exports.getPost = async (postId, membershipNo, mobile) => {
     const res = await pool.query(
         `SELECT p.*,
-            COALESCE(p.author_name, m.name) AS "authorName",
-            COALESCE(p.author_photo, m.profile_photo_url) AS "authorAvatar",
+            COALESCE(p.author_name, m.name) AS author_name,
+            COALESCE(p.author_photo, m.profile_photo_url) AS author_photo,
             m.village AS author_village,
             m.district AS author_district,
             EXISTS(
               SELECT 1 FROM portal_likes l
-              WHERE l.post_id = p.id AND l.member_id = $2
+              WHERE l.post_id = p.id AND l.member_id = $2 AND l.member_mobile = $3
             ) AS liked_by_me
      FROM portal_posts p
      JOIN members m ON m.membership_no = p.author_id
      WHERE p.id = $1`,
-        [postId, membershipNo || '']
+        [postId, membershipNo || '', mobile || '']
     );
     return res.rows[0] || null;
 };
@@ -274,12 +271,12 @@ exports.reportPost = async (postId, reporterId, reason) => {
 /**
  * Toggle like on a post. Returns { liked: boolean, likes_count: number }
  */
-exports.toggleLike = async (postId, memberId) => {
+exports.toggleLike = async (postId, memberId, memberMobile) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
-        // Lock the post row so concurrent likes don't race
+        // Lock the post row
         await client.query(
             `SELECT id FROM portal_posts WHERE id = $1 FOR UPDATE`,
             [postId]
@@ -287,16 +284,16 @@ exports.toggleLike = async (postId, memberId) => {
 
         // Check if already liked
         const existing = await client.query(
-            `SELECT id FROM portal_likes WHERE post_id = $1 AND member_id = $2`,
-            [postId, memberId]
+            `SELECT id FROM portal_likes WHERE post_id = $1 AND member_id = $2 AND member_mobile = $3`,
+            [postId, memberId, memberMobile]
         );
 
         let liked;
         if (existing.rows.length > 0) {
             // Unlike
             await client.query(
-                `DELETE FROM portal_likes WHERE post_id = $1 AND member_id = $2`,
-                [postId, memberId]
+                `DELETE FROM portal_likes WHERE post_id = $1 AND member_id = $2 AND member_mobile = $3`,
+                [postId, memberId, memberMobile]
             );
             await client.query(
                 `UPDATE portal_posts SET likes_count = GREATEST(likes_count - 1, 0) WHERE id = $1`,
@@ -304,10 +301,10 @@ exports.toggleLike = async (postId, memberId) => {
             );
             liked = false;
         } else {
-            // Like — use ON CONFLICT to handle any remaining race
+            // Like
             await client.query(
-                `INSERT INTO portal_likes (post_id, member_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-                [postId, memberId]
+                `INSERT INTO portal_likes (post_id, member_id, member_mobile) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+                [postId, memberId, memberMobile]
             );
             await client.query(
                 `UPDATE portal_posts SET likes_count = likes_count + 1 WHERE id = $1`,
@@ -318,21 +315,20 @@ exports.toggleLike = async (postId, memberId) => {
 
         // Get updated count
         const countRes = await client.query(
-            `SELECT likes_count, author_id FROM portal_posts WHERE id = $1`,
+            `SELECT likes_count, author_id, author_mobile FROM portal_posts WHERE id = $1`,
             [postId]
         );
 
         const likes_count = countRes.rows[0]?.likes_count || 0;
         const authorId = countRes.rows[0]?.author_id;
+        const authorMobile = countRes.rows[0]?.author_mobile;
 
-        if (liked && authorId && authorId !== memberId) {
-            // Get actor name
-            const actorRes = await client.query('SELECT name FROM members WHERE membership_no = $1', [memberId]);
-            const _actorName = actorRes.rows[0]?.name || 'Someone';
+        if (liked && authorId && (authorId !== memberId || (authorMobile && authorMobile !== memberMobile))) {
+            // Notify the author
             await client.query(
-                `INSERT INTO portal_notifications (recipient_id, actor_id, type, post_id, message) 
-                 VALUES ($1, $2, 'like', $3, $4)`,
-                [authorId, memberId, postId, `liked your post`]
+                `INSERT INTO portal_notifications (recipient_id, recipient_mobile, actor_id, actor_mobile, type, post_id, message) 
+                 VALUES ($1, $2, $3, $4, 'like', $5, $6)`,
+                [authorId, authorMobile, memberId, memberMobile, postId, `liked your post`]
             );
         }
 
@@ -354,7 +350,7 @@ exports.toggleLike = async (postId, memberId) => {
 /**
  * Add a comment to a post
  */
-exports.addComment = async (postId, memberId, text, authorName, authorPhoto, authorMobile) => {
+exports.addComment = async (postId, memberId, text, commenterName, commenterPhoto, commenterMobile) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -363,7 +359,7 @@ exports.addComment = async (postId, memberId, text, authorName, authorPhoto, aut
             `INSERT INTO portal_comments (post_id, member_id, text, author_name, author_photo, author_mobile)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-            [postId, memberId, text, authorName || null, authorPhoto || null, authorMobile || null]
+            [postId, memberId, text, commenterName || null, commenterPhoto || null, commenterMobile || null]
         );
 
         await client.query(
@@ -376,8 +372,8 @@ exports.addComment = async (postId, memberId, text, authorName, authorPhoto, aut
         // Fetch with author name
         const commentWithAuthor = await client.query(
             `SELECT c.*, 
-                COALESCE(c.author_name, m.name) AS "authorName",
-                COALESCE(c.author_photo, m.profile_photo_url) AS "authorAvatar"
+                COALESCE(c.author_name, m.name) AS author_name,
+                COALESCE(c.author_photo, m.profile_photo_url) AS author_photo
        FROM portal_comments c
        JOIN members m ON m.membership_no = c.member_id
        WHERE c.id = $1`,
@@ -385,17 +381,16 @@ exports.addComment = async (postId, memberId, text, authorName, authorPhoto, aut
         );
 
         // Fetch post author for notification
-        const postRes = await client.query('SELECT author_id FROM portal_posts WHERE id = $1', [postId]);
-        const authorId = postRes.rows[0]?.author_id;
+        const postRes = await client.query('SELECT author_id, author_mobile FROM portal_posts WHERE id = $1', [postId]);
+        const postAuthorId = postRes.rows[0]?.author_id;
+        const postAuthorMobile = postRes.rows[0]?.author_mobile;
 
-        if (authorId && authorId !== memberId) {
-            const _actorName = commentWithAuthor.rows[0].author_name || 'Someone';
-            // Limit text snippet
+        if (postAuthorId && (postAuthorId !== memberId || (postAuthorMobile && postAuthorMobile !== commenterMobile))) {
             const textSnippet = text.length > 30 ? text.substring(0, 30) + '...' : text;
             await client.query(
-                `INSERT INTO portal_notifications (recipient_id, actor_id, type, post_id, message) 
-                 VALUES ($1, $2, 'comment', $3, $4)`,
-                [authorId, memberId, postId, `commented: "${textSnippet}"`]
+                `INSERT INTO portal_notifications(recipient_id, recipient_mobile, actor_id, actor_mobile, type, post_id, message) 
+                 VALUES($1, $2, $3, $4, 'comment', $5, $6)`,
+                [postAuthorId, postAuthorMobile, memberId, commenterMobile, postId, `commented: "${textSnippet}"`]
             );
         }
 
@@ -413,9 +408,9 @@ exports.addComment = async (postId, memberId, text, authorName, authorPhoto, aut
  */
 exports.getComments = async (postId) => {
     const res = await pool.query(
-        `SELECT c.*, 
-            COALESCE(c.author_name, m.name) AS "authorName",
-            COALESCE(c.author_photo, m.profile_photo_url) AS "authorAvatar"
+        `SELECT c.*,
+            COALESCE(c.author_name, m.name) AS author_name,
+            COALESCE(c.author_photo, m.profile_photo_url) AS author_photo
      FROM portal_comments c
      JOIN members m ON m.membership_no = c.member_id
      WHERE c.post_id = $1
@@ -465,9 +460,9 @@ exports.deleteComment = async (commentId, memberId) => {
  */
 exports.addPhoto = async (memberId, url, caption) => {
     const res = await pool.query(
-        `INSERT INTO portal_photos (member_id, url, caption)
-     VALUES ($1, $2, $3)
-     RETURNING *`,
+        `INSERT INTO portal_photos(member_id, url, caption)
+     VALUES($1, $2, $3)
+     RETURNING * `,
         [memberId, url, caption || null]
     );
     return res.rows[0];
@@ -491,7 +486,7 @@ exports.getPhotos = async (memberId) => {
  */
 exports.deletePhoto = async (photoId, memberId) => {
     const res = await pool.query(
-        `DELETE FROM portal_photos WHERE id = $1 AND member_id = $2 RETURNING *`,
+        `DELETE FROM portal_photos WHERE id = $1 AND member_id = $2 RETURNING * `,
         [photoId, memberId]
     );
     return res.rows[0] || null;
@@ -505,35 +500,33 @@ exports.deletePhoto = async (photoId, memberId) => {
 /**
  * Toggle subscription. Returns { subscribed: boolean }
  */
-exports.toggleSubscription = async (followerId, followingId) => {
-    if (followerId === followingId) {
+exports.toggleSubscription = async (followerId, followerMobile, followingId, followingMobile) => {
+    if (followerId === followingId && followerMobile === followingMobile) {
         throw new Error('Cannot subscribe to yourself');
     }
 
     const existing = await pool.query(
-        `SELECT id FROM portal_subscriptions WHERE follower_id = $1 AND following_id = $2`,
-        [followerId, followingId]
+        `SELECT id FROM portal_subscriptions WHERE follower_id = $1 AND follower_mobile = $2 AND following_id = $3 AND following_mobile = $4`,
+        [followerId, followerMobile, followingId, followingMobile]
     );
 
     if (existing.rows.length > 0) {
         await pool.query(
-            `DELETE FROM portal_subscriptions WHERE follower_id = $1 AND following_id = $2`,
-            [followerId, followingId]
+            `DELETE FROM portal_subscriptions WHERE follower_id = $1 AND follower_mobile = $2 AND following_id = $3 AND following_mobile = $4`,
+            [followerId, followerMobile, followingId, followingMobile]
         );
         return { subscribed: false };
     } else {
         await pool.query(
-            `INSERT INTO portal_subscriptions (follower_id, following_id) VALUES ($1, $2)`,
-            [followerId, followingId]
+            `INSERT INTO portal_subscriptions(follower_id, follower_mobile, following_id, following_mobile) VALUES($1, $2, $3, $4)`,
+            [followerId, followerMobile, followingId, followingMobile]
         );
 
         // Notify
-        const actorRes = await pool.query('SELECT name FROM members WHERE membership_no = $1', [followerId]);
-        const _actorName = actorRes.rows[0]?.name || 'Someone';
         await pool.query(
-            `INSERT INTO portal_notifications (recipient_id, actor_id, type, message) 
-             VALUES ($1, $2, 'follow', $3)`,
-            [followingId, followerId, `started following you`]
+            `INSERT INTO portal_notifications(recipient_id, recipient_mobile, actor_id, actor_mobile, type, message) 
+             VALUES($1, $2, $3, $4, 'follow', $5)`,
+            [followingId, followingMobile, followerId, followerMobile, `started following you`]
         );
 
         return { subscribed: true };
@@ -543,14 +536,20 @@ exports.toggleSubscription = async (followerId, followingId) => {
 /**
  * Get a member's subscriptions (who they follow)
  */
-exports.getSubscriptions = async (memberId) => {
+exports.getSubscriptions = async (memberId, memberMobile) => {
     const res = await pool.query(
-        `SELECT s.following_id, m.name, m.village, m.district, m.profile_photo_url, m.membership_no
+        `SELECT s.following_id, s.following_mobile, m.name, m.village, m.district, head_fm.profile_photo_url, m.membership_no
      FROM portal_subscriptions s
      JOIN members m ON m.membership_no = s.following_id
-     WHERE s.follower_id = $1
+     LEFT JOIN LATERAL (
+        SELECT COALESCE(
+            (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(m.family_members) f WHERE (f->>'mobile')::text = s.following_mobile),
+            m.profile_photo_url
+        ) as profile_photo_url
+     ) head_fm ON true
+     WHERE s.follower_id = $1 AND s.follower_mobile = $2
      ORDER BY s.created_at DESC`,
-        [memberId]
+        [memberId, memberMobile]
     );
     return res.rows;
 };
@@ -558,14 +557,20 @@ exports.getSubscriptions = async (memberId) => {
 /**
  * Get followers of a member
  */
-exports.getFollowers = async (memberId) => {
+exports.getFollowers = async (memberId, memberMobile) => {
     const res = await pool.query(
-        `SELECT follower_id as id, m.name, m.village, m.district, m.profile_photo_url, m.membership_no
+        `SELECT s.follower_id as id, s.follower_mobile, m.name, m.village, m.district, head_fm.profile_photo_url, m.membership_no
      FROM portal_subscriptions s
      JOIN members m ON m.membership_no = s.follower_id
-     WHERE s.following_id = $1
+     LEFT JOIN LATERAL (
+        SELECT COALESCE(
+            (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(m.family_members) f WHERE (f->>'mobile')::text = s.follower_mobile),
+            m.profile_photo_url
+        ) as profile_photo_url
+     ) head_fm ON true
+     WHERE s.following_id = $1 AND s.following_mobile = $2
      ORDER BY s.created_at DESC`,
-        [memberId]
+        [memberId, memberMobile]
     );
     return res.rows;
 };
@@ -575,74 +580,79 @@ exports.getFollowers = async (memberId) => {
 // ═══════════════════════════════════════════════════
 
 // Create a notification
-module.exports.createNotification = async (recipientId, type, actorId, message, postId = null, actorName = null) => {
+module.exports.createNotification = async (recipientId, type, actorId, message, postId = null, actorName = null, recipientMobile = null, actorMobile = null) => {
     const res = await pool.query(
-        `INSERT INTO portal_notifications (recipient_id, type, actor_id, message, post_id, actor_name)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING *`,
-        [recipientId, type, actorId, message, postId, actorName]
+        `INSERT INTO portal_notifications(recipient_id, recipient_mobile, type, actor_id, actor_mobile, message, post_id, actor_name)
+         VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING * `,
+        [recipientId, recipientMobile, type, actorId, actorMobile, message, postId, actorName]
     );
     return res.rows[0];
 };
 
-exports.getNotifications = async (memberId) => {
+exports.getNotifications = async (memberId, memberMobile) => {
     const res = await pool.query(
-        `SELECT n.id, n.type, COALESCE(n.actor_name, m.name) AS "actorName", m.profile_photo_url AS "actorAvatar", n.message, n.created_at AS timestamp, n.is_read AS read, n.post_id AS "postId"
+        `SELECT n.id, n.type, COALESCE(n.actor_name, m.name) AS "actorName", 
+            COALESCE(n.actor_avatar, 
+                (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(m.family_members) f WHERE (f->>'mobile')::text = n.actor_mobile),
+                m.profile_photo_url
+            ) AS "actorAvatar",
+            n.message, n.created_at AS timestamp, n.is_read AS read, n.post_id AS "postId"
          FROM portal_notifications n
          JOIN members m ON m.membership_no = n.actor_id
-         WHERE n.recipient_id = $1
+         WHERE n.recipient_id = $1 AND n.recipient_mobile = $2
          ORDER BY n.created_at DESC
          LIMIT 50`,
-        [memberId]
+        [memberId, memberMobile]
     );
     // Standardize IDs to string for frontend compatibility
     return res.rows.map(r => ({ ...r, id: String(r.id) }));
 };
 
-exports.getUnreadNotificationCount = async (memberId) => {
+exports.getUnreadNotificationCount = async (memberId, memberMobile) => {
     const res = await pool.query(
-        `SELECT COUNT(*) FROM portal_notifications WHERE recipient_id = $1 AND is_read = FALSE`,
-        [memberId]
+        `SELECT COUNT(*) FROM portal_notifications WHERE recipient_id = $1 AND recipient_mobile = $2 AND is_read = FALSE`,
+        [memberId, memberMobile]
     );
     return parseInt(res.rows[0].count, 10);
 };
 
-exports.markNotificationRead = async (id, memberId) => {
+exports.markNotificationRead = async (id, memberId, memberMobile) => {
     const res = await pool.query(
-        `UPDATE portal_notifications SET is_read = TRUE WHERE id = $1 AND recipient_id = $2 RETURNING *`,
-        [id, memberId]
+        `UPDATE portal_notifications SET is_read = TRUE WHERE id = $1 AND recipient_id = $2 AND recipient_mobile = $3 RETURNING * `,
+        [id, memberId, memberMobile]
     );
     return res.rows[0];
 };
 
-exports.markAllNotificationsRead = async (memberId) => {
+exports.markAllNotificationsRead = async (memberId, memberMobile) => {
     await pool.query(
-        `UPDATE portal_notifications SET is_read = TRUE WHERE recipient_id = $1`,
-        [memberId]
+        `UPDATE portal_notifications SET is_read = TRUE WHERE recipient_id = $1 AND recipient_mobile = $2`,
+        [memberId, memberMobile]
     );
 };
 
-exports.deleteNotification = async (id, memberId) => {
+exports.deleteNotification = async (id, memberId, memberMobile) => {
     await pool.query(
-        `DELETE FROM portal_notifications WHERE id = $1 AND recipient_id = $2`,
-        [id, memberId]
+        `DELETE FROM portal_notifications WHERE id = $1 AND recipient_id = $2 AND recipient_mobile = $3`,
+        [id, memberId, memberMobile]
     );
 };
 
 /**
  * Get all members with subscription status for the current member
  */
-exports.getMembersWithSubscription = async (currentMemberId) => {
+exports.getMembersWithSubscription = async (currentMemberId, currentMemberMobile) => {
     const res = await pool.query(
         `SELECT m.membership_no, m.name, m.village, m.district, m.profile_photo_url,
             EXISTS(
-              SELECT 1 FROM portal_subscriptions s
-              WHERE s.follower_id = $1 AND s.following_id = m.membership_no
+                SELECT 1 FROM portal_subscriptions s
+              WHERE s.follower_id = $1 AND s.follower_mobile = $2 AND s.following_id = m.membership_no
             ) AS is_subscribed
      FROM members m
      WHERE m.membership_no != $1
      ORDER BY m.name`,
-        [currentMemberId]
+        [currentMemberId, currentMemberMobile]
     );
     return res.rows;
 };
@@ -653,135 +663,87 @@ exports.getMembersWithSubscription = async (currentMemberId) => {
 // ═══════════════════════════════════════════════════
 
 // Save a message
-module.exports.saveMessage = async (senderId, receiverId, content, type = 'text') => {
+module.exports.saveMessage = async (senderId, senderMobile, receiverId, receiverMobile, content, type = 'text') => {
     const res = await pool.query(
-        `INSERT INTO portal_messages (sender_id, receiver_id, content, type)
-         VALUES ($1, $2, $3, $4)
-         RETURNING *`,
-        [senderId, receiverId, content, type]
+        `INSERT INTO portal_messages(sender_id, sender_mobile, receiver_id, receiver_mobile, content, type)
+         VALUES($1, $2, $3, $4, $5, $6)
+         RETURNING * `,
+        [senderId, senderMobile, receiverId, receiverMobile || null, content, type]
     );
     return res.rows[0];
 };
 
 // Get conversation between two members
-module.exports.getConversation = async (memberId1, memberId2, limit = 50, offset = 0) => {
+module.exports.getConversation = async (memberId1, mobile1, memberId2, mobile2, limit = 50, offset = 0) => {
     const res = await pool.query(
         `SELECT m.*,
-                s.name AS sender_name,
-                s.profile_photo_url AS sender_avatar,
-                r.name AS receiver_name
+            s.name AS sender_name,
+            COALESCE(
+                 (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(s.family_members) f WHERE (f->>'mobile')::text = m.sender_mobile),
+                 s.profile_photo_url
+            ) AS sender_avatar,
+            r.name AS receiver_name
          FROM portal_messages m
          JOIN members s ON s.membership_no = m.sender_id
          JOIN members r ON r.membership_no = m.receiver_id
-         WHERE (m.sender_id = $1 AND m.receiver_id = $2)
-            OR (m.sender_id = $2 AND m.receiver_id = $1)
+         WHERE((m.sender_id = $1 AND m.sender_mobile = $2 AND m.receiver_id = $3 AND m.receiver_mobile = $4)
+            OR(m.sender_id = $3 AND m.sender_mobile = $4 AND m.receiver_id = $1 AND m.receiver_mobile = $2))
          ORDER BY m.created_at ASC
-         LIMIT $3 OFFSET $4`,
-        [memberId1, memberId2, limit, offset]
+         LIMIT $5 OFFSET $6`,
+        [memberId1, mobile1, memberId2, mobile2 || '', limit, offset]
     );
     return res.rows;
 };
 
 // Mark messages as read
-module.exports.markMessagesRead = async (receiverId, senderId) => {
+module.exports.markMessagesRead = async (receiverId, receiverMobile, senderId, senderMobile) => {
     await pool.query(
         `UPDATE portal_messages SET read = TRUE
-         WHERE receiver_id = $1 AND sender_id = $2 AND read = FALSE`,
-        [receiverId, senderId]
+         WHERE receiver_id = $1 AND receiver_mobile = $2 AND sender_id = $3 AND sender_mobile = $4 AND read = FALSE`,
+        [receiverId, receiverMobile, senderId, senderMobile || '']
     );
 };
 
 // Get chat contacts for a member (latest message per contact)
-module.exports.getChatContacts = async (memberId) => {
+module.exports.getChatContacts = async (memberId, memberMobile) => {
     const res = await pool.query(
-        `SELECT DISTINCT ON (contact_id)
+        `SELECT DISTINCT ON(contact_id, contact_mobile)
                 contact_id,
-                contact_name,
-                contact_avatar,
-                last_message,
-                last_message_time,
-                unread_count
-         FROM (
-             SELECT
-                 CASE WHEN m.sender_id = $1 THEN m.receiver_id ELSE m.sender_id END AS contact_id,
-                 CASE WHEN m.sender_id = $1 THEN r.name ELSE s.name END AS contact_name,
-                 CASE WHEN m.sender_id = $1 THEN r.profile_photo_url ELSE s.profile_photo_url END AS contact_avatar,
-                 m.content AS last_message,
-                 m.created_at AS last_message_time,
-                 (SELECT COUNT(*) FROM portal_messages
-                  WHERE sender_id = CASE WHEN m.sender_id = $1 THEN m.receiver_id ELSE m.sender_id END
+                contact_mobile,
+            contact_name,
+            contact_avatar,
+            last_message,
+            last_message_time,
+            unread_count
+         FROM(
+                SELECT
+                 CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN m.receiver_id ELSE m.sender_id END AS contact_id,
+                 CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN m.receiver_mobile ELSE m.sender_mobile END AS contact_mobile,
+                CASE WHEN (m.sender_id = $1 AND m.sender_mobile = $2) THEN r.name ELSE s.name END AS contact_name,
+                CASE WHEN (m.sender_id = $1 AND m.sender_mobile = $2) THEN 
+                    COALESCE((SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(r.family_members) f WHERE (f->>'mobile')::text = m.receiver_mobile), r.profile_photo_url)
+                ELSE 
+                    COALESCE((SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(s.family_members) f WHERE (f->>'mobile')::text = m.sender_mobile), s.profile_photo_url)
+                END AS contact_avatar,
+                m.content AS last_message,
+                m.created_at AS last_message_time,
+                (SELECT COUNT(*) FROM portal_messages
+                  WHERE sender_id = CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN m.receiver_id ELSE m.sender_id END
+                    AND sender_mobile = CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN m.receiver_mobile ELSE m.sender_mobile END
                     AND receiver_id = $1
+                    AND receiver_mobile = $2
                     AND read = FALSE) AS unread_count
              FROM portal_messages m
              JOIN members s ON s.membership_no = m.sender_id
              JOIN members r ON r.membership_no = m.receiver_id
-             WHERE m.sender_id = $1 OR m.receiver_id = $1
+             WHERE (m.sender_id = $1 AND m.sender_mobile = $2) OR (m.receiver_id = $1 AND m.receiver_mobile = $2)
              ORDER BY m.created_at DESC
-         ) sub
-         ORDER BY contact_id, last_message_time DESC`,
-        [memberId]
+        ) sub
+         ORDER BY contact_id, contact_mobile, last_message_time DESC`,
+        [memberId, memberMobile]
     );
     return res.rows;
 };
 
 
-// ═══════════════════════════════════════════════════
-//  NOTIFICATIONS
-// ═══════════════════════════════════════════════════
 
-// Create a notification
-module.exports.createNotification = async (memberId, type, actorId, message, postId = null) => {
-    const res = await pool.query(
-        `INSERT INTO portal_notifications (member_id, type, actor_id, message, post_id)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING *`,
-        [memberId, type, actorId, message, postId]
-    );
-    return res.rows[0];
-};
-
-// Get notifications for a member
-module.exports.getNotifications = async (memberId, limit = 30) => {
-    const res = await pool.query(
-        `SELECT n.*,
-                a.name AS actor_name,
-                a.profile_photo_url AS actor_avatar
-         FROM portal_notifications n
-         LEFT JOIN members a ON a.membership_no = n.actor_id
-         WHERE n.member_id = $1
-         ORDER BY n.created_at DESC
-         LIMIT $2`,
-        [memberId, limit]
-    );
-    return res.rows;
-};
-
-// Mark single notification as read
-module.exports.markNotificationRead = async (notificationId, memberId) => {
-    const res = await pool.query(
-        `UPDATE portal_notifications SET read = TRUE
-         WHERE id = $1 AND member_id = $2
-         RETURNING *`,
-        [notificationId, memberId]
-    );
-    return res.rows[0];
-};
-
-// Mark all notifications as read
-module.exports.markAllNotificationsRead = async (memberId) => {
-    await pool.query(
-        `UPDATE portal_notifications SET read = TRUE
-         WHERE member_id = $1 AND read = FALSE`,
-        [memberId]
-    );
-};
-
-// Count unread notifications
-module.exports.getUnreadNotificationCount = async (memberId) => {
-    const res = await pool.query(
-        `SELECT COUNT(*) as count FROM portal_notifications
-         WHERE member_id = $1 AND read = FALSE`,
-        [memberId]
-    );
-    return parseInt(res.rows[0].count, 10);
-};

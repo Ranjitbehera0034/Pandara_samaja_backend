@@ -48,7 +48,7 @@ const requireAnyAuth = (req, res, next) => {
         }
 
         next();
-    } catch (error) {
+    } catch (err) {
         return res.status(401).json({
             success: false,
             message: 'Invalid or expired token.'

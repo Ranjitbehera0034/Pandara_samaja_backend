@@ -1,6 +1,5 @@
 const admin = require('firebase-admin');
 const fs = require('fs');
-const path = require('path');
 
 /**
  * Initializes Firebase Admin SDK
@@ -54,7 +53,7 @@ if (!serviceAccount) {
     try {
         serviceAccount = require('./firebase-service-account.json');
         console.log('✅ Firebase: Loaded from local config directory');
-    } catch (_err) {
+    } catch (err) {
         console.warn("⚠️ Firebase: No service account found. Firebase Auth will not work.");
         console.warn("   Set FIREBASE_SERVICE_ACCOUNT_PATH or upload secret file to Render.");
     }
@@ -71,7 +70,7 @@ if (serviceAccount) {
         firebaseAdmin = admin.initializeApp({
             credential: admin.credential.applicationDefault()
         });
-    } catch (_err) {
+    } catch (err) {
         console.error("❌ Firebase: Could not initialize. Firebase login will not work.");
         firebaseAdmin = null;
     }

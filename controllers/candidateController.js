@@ -37,10 +37,17 @@ exports.create = async (req, res, next) => {
       if (data[k] === "") data[k] = null;
     });
 
-    // 2. Handle photo: file upload OR provided URL
-    if (req.file) {
-      data.photo = await gDrive.uploadFile(req.file);
-    } else if (data.photoUrl) {
+    // 2. Handle uploads: photo AND manual_form
+    if (req.files) {
+      if (req.files.photo) {
+        data.photo = await gDrive.uploadFile(req.files.photo[0]);
+      }
+      if (req.files.manual_form) {
+        data.manual_form = await gDrive.uploadFile(req.files.manual_form[0]);
+      }
+    }
+
+    if (!data.photo && data.photoUrl) {
       data.photo = data.photoUrl;
     }
     const result = await model.createCandidate(data);
@@ -55,18 +62,30 @@ exports.update = async (req, res, next) => {
     const id = req.params.id;
     const data = req.body;
 
-    // Fetch existing candidate to preserve photo (and potentially other fields)
+    // Fetch existing candidate to preserve files
     const existingResult = await model.getById(id);
-    let existingPhoto = null;
+    let existing = null;
     if (existingResult.rows.length > 0) {
-      existingPhoto = existingResult.rows[0].photo;
+      existing = existingResult.rows[0];
     }
-    if (req.file) {
-      data.photo = await gDrive.uploadFile(req.file); // public URL
-    } else if (!data.photo && existingPhoto) {
-      // If no new file AND no new photo URL provided, keep the old one
-      data.photo = existingPhoto;
+
+    if (req.files) {
+      if (req.files.photo) {
+        data.photo = await gDrive.uploadFile(req.files.photo[0]);
+      } else if (existing) {
+        data.photo = existing.photo;
+      }
+
+      if (req.files.manual_form) {
+        data.manual_form = await gDrive.uploadFile(req.files.manual_form[0]);
+      } else if (existing) {
+        data.manual_form = existing.manual_form;
+      }
+    } else if (existing) {
+      data.photo = existing.photo;
+      data.manual_form = existing.manual_form;
     }
+
     const result = await model.updateCandidate(id, data);
     res.json(result.rows[0]);
   } catch (err) {
