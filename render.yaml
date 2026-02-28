@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: pandara-samaja-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pandara_db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_WEBHOOK_VERIFY_TOKEN
+        value: pandara_samaja_v1_secure_verify
+      - key: WHATSAPP_OTP_TEMPLATE
+        value: auth_otp_verification
+      - key: OTPLESS_APP_ID
+        sync: false
+      - key: OTPLESS_CLIENT_ID
+        sync: false
+      - key: OTPLESS_CLIENT_SECRET
+        sync: false
+
+databases:
+  - name: pandara_db
+    plan: free

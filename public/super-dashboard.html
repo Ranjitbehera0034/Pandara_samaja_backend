@@ -370,10 +370,10 @@
         </div>
     </div>
 
-    <script src="frontend-api-helper.js"></script>
+    <script src="/tools/frontend-api-helper.js"></script>
     <script>
-        // Initialize Socket.io
-        const socket = io('http://localhost:5000');
+        // Initialize Socket.io (Works for both Local and Deployed)
+        const socket = io(window.location.origin);
         const feed = document.getElementById('feedContent');
 
         socket.on('connect', () => {
