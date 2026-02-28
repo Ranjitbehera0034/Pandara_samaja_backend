@@ -143,7 +143,7 @@ exports.login = async (req, res, next) => {
 
         console.log(`[AUTH] OTP requested for ${membership_no} (Mobile: ${cleanMobile}): ${otp}`);
 
-        if (process.env.WHATSAPP_API_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID) {
+        if (process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID) {
             try {
                 // Format for WhatsApp API: ensuring country code (assuming India +91 if 10 digits)
                 const whatsappNumber = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile;
@@ -151,7 +151,7 @@ exports.login = async (req, res, next) => {
                 const whatsappResponse = await fetch(`https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
                     method: "POST",
                     headers: {
-                        "Authorization": `Bearer ${process.env.WHATSAPP_API_TOKEN}`,
+                        "Authorization": `Bearer ${process.env.WHATSAPP_TOKEN}`,
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({

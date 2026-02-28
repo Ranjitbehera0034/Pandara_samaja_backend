@@ -1,12 +1,21 @@
 const pool = require('../config/db');
 const settingsModel = require('../models/settingsModel');
+const {
+  sendAdminActionAlert
+} = require('../utils/emailService');
 
 // Helper component for Audit Logging
 const logAdminAction = async (req, action, targetType, targetId, details = {}) => {
   try {
     const adminUsername = req.user ? req.user.username : 'system';
-    const ipAddress = req.ip || req.connection.remoteAddress;
-    await pool.query('INSERT INTO admin_audit_logs (admin_username, action, target_type, target_id, details, ip_address) VALUES ($1, $2, $3, $4, $5, $6)', [adminUsername, action, targetType, targetId, JSON.stringify(details), ipAddress]);
+    const ipAddress = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'];
+
+    // Send Alert to Super Admin (Non-blocking)
+    if (adminUsername !== 'system') {
+      sendAdminActionAlert(adminUsername, action, targetType, targetId, details).catch(e => console.error('Alert Error:', e));
+    }
+
+    await pool.query('INSERT INTO admin_audit_logs (admin_username, action, target_type, target_id, details, ip_address) VALUES ($1, $2, $3, $4, $5, $6)', [adminUsername, action, targetType, targetId, JSON.stringify(details), ipAddress || '0.0.0.0']);
   } catch (e) {
     console.error('Failed to write audit log:', e);
   }

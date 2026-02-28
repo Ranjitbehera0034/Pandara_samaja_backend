@@ -8,8 +8,11 @@ const { adminLoginSchema, registerAdminSchema } = require('../validators/authVal
 // Public routes
 router.post('/login', validate({ body: adminLoginSchema }), AuthController.login);
 
-// Protected routes (Only Super Admin can register new users/admins)
+// Protected routes (Only Super Admin can register/manage users/admins)
 router.post('/register', requireAuthSuperAdmin, validate({ body: registerAdminSchema }), AuthController.register);
+router.get('/admins', requireAuthSuperAdmin, AuthController.getAllAdmins);
+router.delete('/admins/:id', requireAuthSuperAdmin, AuthController.deleteAdmin);
+router.get('/search-members', requireAuthSuperAdmin, AuthController.searchMembers);
 
 // Protected routes (require auth, but some require only temp token)
 router.post('/mfa/setup', requireAuth, AuthController.setupMfa);
