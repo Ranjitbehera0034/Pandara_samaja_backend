@@ -70,7 +70,7 @@ const optionalPortalAuth = (req, res, next) => {
                 };
             }
         }
-    } catch (ignore) {
+    } catch (_ignore) {
         // optional — ignore errors
     }
     next();

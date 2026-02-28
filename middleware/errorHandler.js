@@ -2,7 +2,7 @@
  * Global Error Handler Middleware
  * Standardizes API error responses across the entire application.
  */
-const errorHandler = (err, req, res, next) => {
+const errorHandler = (err, req, res, _next) => {
     // Log error for debugging purposes (consider using Winston/Pino for serious prod logging)
     console.error(`[Error] ${err.name}: ${err.message}`);
     if (process.env.NODE_ENV !== 'production') {

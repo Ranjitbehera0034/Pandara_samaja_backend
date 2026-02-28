@@ -1,5 +1,4 @@
 const admin = require('firebase-admin');
-const path = require('path');
 
 /**
  * Initializes Firebase Admin SDK
@@ -20,7 +19,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 if (!serviceAccount) {
     try {
         serviceAccount = require('./firebase-service-account.json');
-    } catch (err) {
+    } catch (_err) {
         console.warn("⚠️ firebase-service-account.json not found in config directory. Firebase Admin might not initialize correctly if no environment credentials exist.");
     }
 }

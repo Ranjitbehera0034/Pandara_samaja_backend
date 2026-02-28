@@ -105,7 +105,7 @@ module.exports = {
           role: decoded.role
         };
       }
-    } catch (ignore) {
+    } catch (_ignore) {
       // Ignore errors for optional auth
     }
     next();

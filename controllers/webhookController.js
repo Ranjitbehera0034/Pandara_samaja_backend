@@ -6,7 +6,7 @@ const pool = require('../config/db');
  */
 
 // Handle Webhook Verification (WhatsApp requires this when setting up the webhook URL)
-exports.verifyWebhook = (req, res, next) => {
+exports.verifyWebhook = (req, res, _next) => {
     /**
      * UPDATE YOUR VERIFY TOKEN
      * This will be the Verify Token value when you set up webhook in Meta App Dashboard
@@ -35,7 +35,7 @@ exports.verifyWebhook = (req, res, next) => {
 };
 
 // Handle Incoming Webhook Events
-exports.receiveWebhook = async (req, res, next) => {
+exports.receiveWebhook = async (req, res, _next) => {
     // Return a '200 OK' response to all requests
     res.sendStatus(200);
 
