@@ -15,8 +15,14 @@ exports.getOne = async (req, res) => {
 // controllers/candidateController.js
 exports.create = async (req, res, next) => {
   try {
+    const body = req.body;
     const data = {
-      ...req.body
+      ...body,
+      dob: body.date_of_birth || body.dob,
+      father: body.father_name || body.father,
+      phone: body.mobile || body.phone,
+      author_id: req.anyUser ? req.anyUser.id : null,
+      status: 'pending' // Initial status
     };
 
     // 1. Validate required fields

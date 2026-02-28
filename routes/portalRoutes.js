@@ -20,11 +20,7 @@ const loginRateLimiter = rateLimit({
 module.exports = (upload) => {
 
     // ── Public routes (no auth) ──
-    router.post('/login', loginRateLimiter, validate({ body: portalLoginSchema }), portalCtrl.login);
-    router.post('/login/verify-otp', loginRateLimiter, validate({ body: portalVerifyOtpSchema }), portalCtrl.verifyOtp);
-    // NEW: OTP-less verify token route
-    router.post('/login/otpless', loginRateLimiter, validate({ body: portalVerifyOtplessSchema }), portalCtrl.verifyOtplessToken);
-    // NEW: Firebase verify token route
+    // Firebase verify token route
     router.post('/login/firebase', loginRateLimiter, validate({ body: portalVerifyFirebaseSchema }), portalCtrl.loginWithFirebase);
 
     // ── Protected routes (require member portal JWT) ──
