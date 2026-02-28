@@ -61,6 +61,8 @@ exports.loginWithFirebase = async (req, res, next) => {
             {
                 membership_no: member.membership_no,
                 name: result.matchedUser && result.matchedUser.name ? result.matchedUser.name : member.name,
+                mobile: result.matchedUser?.mobile || cleanMobile,
+                relation: result.matchedUser?.relation || 'Self/Head',
                 type: 'member_portal'
             },
             JWT_SECRET,
@@ -289,8 +291,9 @@ exports.verifyOtplessToken = async (req, res, next) => {
         const token = jwt.sign(
             {
                 membership_no: member.membership_no,
-                // Replace member.name with matchedUser's name if applicable to attribute action identities correctly
                 name: result.matchedUser && result.matchedUser.name ? result.matchedUser.name : member.name,
+                mobile: result.matchedUser?.mobile || cleanMobile,
+                relation: result.matchedUser?.relation || 'Self/Head',
                 type: 'member_portal'
             },
             JWT_SECRET,
@@ -357,8 +360,9 @@ exports.verifyOtp = async (req, res) => {
         const token = jwt.sign(
             {
                 membership_no: member.membership_no,
-                // Replace member.name with matchedUser's name if applicable to attribute action identities correctly
                 name: result.matchedUser && result.matchedUser.name ? result.matchedUser.name : member.name,
+                mobile: result.matchedUser?.mobile || cleanMobile,
+                relation: result.matchedUser?.relation || 'Self/Head',
                 type: 'member_portal'
             },
             JWT_SECRET,
@@ -404,11 +408,22 @@ exports.getProfile = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Member not found' });
         }
 
+        // Determine profile photo for the SPECIFIC logged-in person
+        let profilePhotoUrl = member.profile_photo_url;
+        const loggedInMobile = (req.portalMember.mobile || '').replace(/\D/g, '');
+        const headMobile = (member.mobile || '').replace(/\D/g, '');
+
+        if (loggedInMobile !== headMobile && Array.isArray(member.family_members)) {
+            const fm = member.family_members.find(f => (f.mobile || '').replace(/\D/g, '') === loggedInMobile);
+            if (fm && fm.profile_photo_url) {
+                profilePhotoUrl = fm.profile_photo_url;
+            }
+        }
+
         res.json({
             success: true,
             member: {
                 membership_no: member.membership_no,
-                // Make sure the logged-in acting identity is preserved visually when profile is fetched
                 name: req.portalMember.name || member.name,
                 mobile: member.mobile,
                 district: member.district,
@@ -421,7 +436,7 @@ exports.getProfile = async (req, res) => {
                 female: member.female,
                 head_gender: member.head_gender,
                 family_members: member.family_members,
-                profile_photo_url: member.profile_photo_url
+                profile_photo_url: profilePhotoUrl
             }
         });
     } catch (error) {
@@ -488,16 +503,16 @@ exports.uploadProfilePhoto = async (req, res) => {
             return res.status(400).json({ success: false, message: 'No file uploaded' });
         }
 
-        // Upload to Google Drive
+        // Update specific family member profile photo
         const url = await uploadFile(req.file);
+        await portal.updateFamilyMemberPhoto(
+            req.portalMember.membership_no,
+            req.portalMember.mobile,
+            url
+        );
 
-        // Update member profile
-        await portal.updateMemberProfile(req.portalMember.membership_no, {
-            profile_photo_url: url
-        });
-
-        // Also save to gallery
-        await portal.addPhoto(req.portalMember.membership_no, url, 'Profile Photo');
+        // Also save to gallery (associated with membership_no)
+        await portal.addPhoto(req.portalMember.membership_no, url, `Profile Photo - ${req.portalMember.name}`);
 
         res.json({
             success: true,
@@ -576,12 +591,27 @@ exports.createPost = async (req, res) => {
         }
 
         const member = req.portalMember;
+
+        // Fetch current individual photo
+        const profileRes = await pool.query('SELECT profile_photo_url, family_members, mobile FROM members WHERE membership_no = $1', [member.membership_no]);
+        let authorPhoto = profileRes.rows[0]?.profile_photo_url;
+        if (profileRes.rows[0]) {
+            const headMobile = (profileRes.rows[0].mobile || '').replace(/\D/g, '');
+            const loggedInMobile = (member.mobile || '').replace(/\D/g, '');
+            if (loggedInMobile !== headMobile && Array.isArray(profileRes.rows[0].family_members)) {
+                const fm = profileRes.rows[0].family_members.find(f => (f.mobile || '').replace(/\D/g, '') === loggedInMobile);
+                if (fm && fm.profile_photo_url) authorPhoto = fm.profile_photo_url;
+            }
+        }
+
         const post = await portal.createPost({
             authorId: member.membership_no,
             textContent: text || null,
             images: imageUrls,
             location: member.village || null,
-            authorName: member.name // passes family member identity
+            authorName: member.name, // passes family member identity
+            authorPhoto: authorPhoto,
+            authorMobile: member.mobile
         });
 
         // Return enriched post
@@ -799,11 +829,27 @@ exports.addComment = async (req, res) => {
             }
         }
 
+        const member = req.portalMember;
+
+        // Fetch current individual photo
+        const profileRes = await pool.query('SELECT profile_photo_url, family_members, mobile FROM members WHERE membership_no = $1', [member.membership_no]);
+        let authorPhoto = profileRes.rows[0]?.profile_photo_url;
+        if (profileRes.rows[0]) {
+            const headMobile = (profileRes.rows[0].mobile || '').replace(/\D/g, '');
+            const loggedInMobile = (member.mobile || '').replace(/\D/g, '');
+            if (loggedInMobile !== headMobile && Array.isArray(profileRes.rows[0].family_members)) {
+                const fm = profileRes.rows[0].family_members.find(f => (f.mobile || '').replace(/\D/g, '') === loggedInMobile);
+                if (fm && fm.profile_photo_url) authorPhoto = fm.profile_photo_url;
+            }
+        }
+
         const comment = await portal.addComment(
             req.params.id,
-            req.portalMember.membership_no,
+            member.membership_no,
             text.trim(),
-            req.portalMember.name // explicitly passes family member name
+            member.name,
+            authorPhoto,
+            member.mobile
         );
 
         // Notify connected clients
@@ -817,16 +863,16 @@ exports.addComment = async (req, res) => {
 
         // Create notification for post author
         try {
-            const post = await portal.getPost(req.params.id, req.portalMember.membership_no);
-            if (post && post.author_id !== req.portalMember.membership_no) {
+            const post = await portal.getPost(req.params.id, member.membership_no);
+            if (post && post.author_id !== member.membership_no) {
                 const preview = text.trim().substring(0, 50);
                 await portal.createNotification(
                     post.author_id,
                     'comment',
-                    req.portalMember.membership_no,
+                    member.membership_no,
                     `commented: "${preview}${text.trim().length > 50 ? '...' : ''}"`,
                     parseInt(req.params.id),
-                    req.portalMember.name
+                    member.name
                 );
                 if (io) {
                     const count = await portal.getUnreadNotificationCount(post.author_id);

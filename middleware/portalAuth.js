@@ -30,7 +30,9 @@ const requirePortalAuth = (req, res, next) => {
 
         req.portalMember = {
             membership_no: decoded.membership_no,
-            name: decoded.name
+            name: decoded.name,
+            mobile: decoded.mobile,
+            relation: decoded.relation
         };
 
         next();
