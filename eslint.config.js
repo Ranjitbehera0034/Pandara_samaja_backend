@@ -4,7 +4,7 @@ const globals = require("globals");
 module.exports = [
     js.configs.recommended,
     {
-        ignores: [".claude/**", ".gemini/**", "node_modules/**", "frontend-api-helper.js", "babel-mod.js", "scripts/**"]
+        ignores: [".claude/**", ".gemini/**", "node_modules/**", "public/**", "tests/manual/**", "frontend-api-helper.js", "babel-mod.js", "scripts/**"]
     },
     {
         languageOptions: {
