@@ -3,9 +3,97 @@ const jwt = require('jsonwebtoken');
 const portal = require('../models/portalModel');
 const { uploadFile } = require('../config/googleDrive');
 const pool = require('../config/db');
+const firebaseAdmin = require('../config/firebase');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
 const PORTAL_JWT_EXPIRES = process.env.PORTAL_JWT_EXPIRES || '7d';
+
+/**
+ * POST /api/v1/portal/login/firebase
+ * Body: { membership_no, mobile, idToken }
+ */
+exports.loginWithFirebase = async (req, res, next) => {
+    try {
+        const { membership_no, mobile, idToken } = req.body;
+
+        if (!membership_no || !mobile || !idToken) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing parameters: membership_no, mobile, and idToken are required'
+            });
+        }
+
+        const cleanMobile = mobile.replace(/\D/g, '');
+        const result = await portal.findByCredentials(membership_no.trim(), cleanMobile);
+
+        if (!result || !result.member) {
+            return res.status(401).json({
+                success: false,
+                message: 'Member lookup failed / unauthorized.'
+            });
+        }
+
+        // Verify Firebase Token
+        let decodedToken;
+        try {
+            decodedToken = await firebaseAdmin.auth().verifyIdToken(idToken);
+        } catch (authErr) {
+            console.error('[AUTH] Firebase Verification Failed:', authErr);
+            return res.status(401).json({
+                success: false,
+                message: 'Firebase verification failed or token expired.'
+            });
+        }
+
+        // Verify that the phone number in the token matches the mobile number
+        const firebasePhone = decodedToken.phone_number;
+        if (!firebasePhone || !firebasePhone.includes(cleanMobile)) {
+            return res.status(401).json({
+                success: false,
+                message: 'The verified SMS number does not match your registered mobile.'
+            });
+        }
+
+        const member = result.member;
+
+        // Generate JWT for member portal
+        const token = jwt.sign(
+            {
+                membership_no: member.membership_no,
+                name: result.matchedUser && result.matchedUser.name ? result.matchedUser.name : member.name,
+                type: 'member_portal'
+            },
+            JWT_SECRET,
+            { expiresIn: PORTAL_JWT_EXPIRES }
+        );
+
+        res.json({
+            success: true,
+            message: 'Firebase Login successful',
+            token,
+            member: {
+                membership_no: member.membership_no,
+                name: member.name,
+                mobile: member.mobile,
+                district: member.district,
+                taluka: member.taluka,
+                panchayat: member.panchayat,
+                village: member.village,
+                address: member.address,
+                aadhar_no: member.aadhar_no,
+                male: member.male,
+                female: member.female,
+                head_gender: member.head_gender,
+                family_members: member.family_members,
+                profile_photo_url: member.profile_photo_url
+            },
+            loggedInUser: result.matchedUser
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
 
 // ═══════════════════════════════════════════════════
 //  AUTHENTICATION
