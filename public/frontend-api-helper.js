@@ -3,14 +3,23 @@
  * This file provides helper functions to make authenticated API calls
  */
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+    ? 'http://localhost:5000/api/v1'
+    : window.location.origin + '/api/v1';
 
 // Token management
 const AuthToken = {
     get: () => localStorage.getItem('authToken'),
     set: (token) => localStorage.setItem('authToken', token),
-    remove: () => localStorage.removeItem('authToken'),
-    exists: () => !!localStorage.getItem('authToken')
+    remove: () => {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('portalToken');
+    },
+    exists: () => !!localStorage.getItem('authToken') || !!localStorage.getItem('portalToken'),
+
+    // Portal specific token
+    getPortal: () => localStorage.getItem('portalToken'),
+    setPortal: (token) => localStorage.setItem('portalToken', token)
 };
 
 // User management
@@ -291,6 +300,68 @@ const CandidatesAPI = {
     delete: async (id) => {
         return await apiRequest(`/candidates/${id}`, {
             method: 'DELETE'
+        });
+    }
+};
+
+// ============================================
+// PORTAL (MEMBER) API
+// ============================================
+
+const PortalAPI = {
+    /**
+     * Start login process (sends WhatsApp OTP)
+     */
+    login: async (membership_no, mobile) => {
+        return await apiRequest('/portal/login', {
+            method: 'POST',
+            body: JSON.stringify({ membership_no, mobile })
+        });
+    },
+
+    /**
+     * Verify WhatsApp OTP
+     */
+    verify: async (membership_no, mobile, otp) => {
+        const data = await apiRequest('/portal/verify', {
+            method: 'POST',
+            body: JSON.stringify({ membership_no, mobile, otp })
+        });
+
+        if (data.success && data.token) {
+            AuthToken.setPortal(data.token);
+            AuthUser.set(data.member);
+        }
+
+        return data;
+    },
+
+    /**
+     * Verify OTPless Token (One-Tap Login)
+     */
+    verifyOtpless: async (otplessToken) => {
+        const data = await apiRequest('/portal/verify-otpless', {
+            method: 'POST',
+            body: JSON.stringify({ otplessToken })
+        });
+
+        if (data.success && data.token) {
+            AuthToken.setPortal(data.token);
+            AuthUser.set(data.member);
+        }
+
+        return data;
+    },
+
+    /**
+     * Get member profile
+     */
+    getProfile: async () => {
+        const token = AuthToken.getPortal();
+        return await apiRequest('/portal/profile', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
         });
     }
 };

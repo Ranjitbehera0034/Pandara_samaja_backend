@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pandara Samaja | Admin & Member Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg-dark: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --accent-green: #22c55e;
+            --accent-purple: #a855f7;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .dashboard {
+            width: 100%;
+            max-width: 1200px;
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 30px;
+            backdrop-filter: blur(20px);
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        @media (max-width: 900px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ─── Forms Column ─── */
+        .auth-section {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 30px;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+        }
+
+        h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+
+        input {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            color: white;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button:hover {
+            background: var(--primary-hover);
+            transform: scale(1.02);
+        }
+
+        button.wa-btn {
+            background: #25d366;
+        }
+
+        button.wa-btn:hover {
+            background: #128c7e;
+        }
+
+        /* ─── Live Feed Column ─── */
+        .feed-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .feed-card {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            flex-grow: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .feed-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .feed-content {
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .feed-item {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 15px;
+            border-left: 4px solid var(--text-dim);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .feed-item.sent {
+            border-color: var(--primary);
+        }
+
+        .feed-item.delivered {
+            border-color: var(--accent-green);
+        }
+
+        .feed-item.read {
+            border-color: var(--accent-purple);
+        }
+
+        .feed-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-bottom: 5px;
+        }
+
+        .badge {
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 10px;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        .badge.sent {
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--primary);
+        }
+
+        .badge.delivered {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--accent-green);
+        }
+
+        .badge.read {
+            background: rgba(168, 85, 247, 0.2);
+            color: var(--accent-purple);
+        }
+
+        /* ─── Modal / Loading ─── */
+        #otpModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard">
+        <!-- Forms -->
+        <div class="auth-section">
+            <header>
+                <h1 style="font-size: 28px; font-weight: 700;">System Access</h1>
+                <p style="color: var(--text-dim); font-size: 14px;">Backend Integration Suite v1.2</p>
+            </header>
+
+            <!-- Admin Login -->
+            <div class="card">
+                <h2><span>🛡️</span> Admin Portal</h2>
+                <form id="adminForm">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="adminUser" placeholder="admin" value="admin">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="adminPass" placeholder="••••••••" value="admin123">
+                    </div>
+                    <button type="submit">Unlock System</button>
+                </form>
+            </div>
+
+            <!-- Member Login -->
+            <div class="card">
+                <h2><span>👤</span> Member Login</h2>
+                <div id="memberRequestFlow">
+                    <div class="form-group">
+                        <label>Membership Number</label>
+                        <input type="text" id="memberNo" placeholder="e.g. MS-1234">
+                    </div>
+                    <div class="form-group">
+                        <label>Mobile Number</label>
+                        <input type="text" id="memberMobile" placeholder="+91XXXXXXXXXX">
+                    </div>
+                    <button id="waBtn" class="wa-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.801.983 3.826 1.499 5.888 1.503h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                        </svg>
+                        Request WhatsApp OTP
+                    </button>
+                    <div style="text-align: center; margin: 15px 0; color: var(--text-dim); font-size: 12px;">OR</div>
+                    <button id="otplessBtn" style="background: white; color: black;">
+                        ⚡ One-Tap Verification
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Feed -->
+        <div class="feed-section">
+            <div class="feed-card">
+                <div class="feed-header">
+                    <h2 style="margin:0">Live Event Monitor</h2>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size: 12px; color: var(--text-dim)">Cloud Webhook Active</span>
+                        <div class="status-dot"></div>
+                    </div>
+                </div>
+                <div id="feedContent" class="feed-content">
+                    <div class="feed-item">
+                        <div class="feed-meta">
+                            <span>System</span>
+                            <span>Just now</span>
+                        </div>
+                        <p style="font-size: 14px;">Monitor initialized. Waiting for Meta webhook events...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- OTP MODAL -->
+    <div id="otpModal">
+        <div class="card" style="width: 320px;">
+            <h2 style="justify-content: center;">Enter OTP</h2>
+            <p style="text-align: center; color: var(--text-dim); font-size: 13px; margin-bottom: 20px;">We sent a
+                6-digit code to your WhatsApp</p>
+            <div class="form-group">
+                <input type="text" id="otpInput" maxlength="6"
+                    style="text-align: center; font-size: 24px; letter-spacing: 12px; font-weight: 700;">
+            </div>
+            <button id="verifyOtpBtn">Verify Account</button>
+            <button id="cancelOtp"
+                style="background: transparent; border: 1px solid var(--border); margin-top: 10px;">Cancel</button>
+        </div>
+    </div>
+
+    <script src="/tools/frontend-api-helper.js"></script>
+    <script>
+        // Initialize Socket.io (Works for both Local and Deployed)
+        const socket = io(window.location.origin);
+        const feed = document.getElementById('feedContent');
+
+        socket.on('connect', () => {
+            addFeedItem('System', 'Connected to real-time notification hub', 'info');
+        });
+
+        // Listen for live webhook updates
+        socket.on('wa_status_update', (data) => {
+            console.log('Webhook event received:', data);
+            addFeedItem(
+                `WhatsApp (${data.recipient || 'User'})`,
+                `Status: ${data.status.toUpperCase()} (MID: ${data.message_id.substring(0, 8)}...)`,
+                data.status
+            );
+        });
+
+        function addFeedItem(source, text, statusClass) {
+            const item = document.createElement('div');
+            item.className = `feed-item ${statusClass}`;
+            const time = new Date().toLocaleTimeString();
+            item.innerHTML = `
+                <div class="feed-meta">
+                    <span>${source}</span>
+                    <span>${time}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <p style="font-size: 14px;">${text}</p>
+                    <span class="badge ${statusClass}">${statusClass}</span>
+                </div>
+            `;
+            feed.prepend(item);
+        }
+
+        // --- DASHBOARD LOGIC ---
+
+        // 1. Admin Login
+        document.getElementById('adminForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = document.getElementById('adminUser').value;
+            const pass = document.getElementById('adminPass').value;
+            try {
+                const res = await AuthAPI.login(user, pass);
+                if (res.success) {
+                    alert('Admin Access Granted!');
+                    addFeedItem('Auth', `Admin '${user}' logged in from dashboard`, 'read');
+                }
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+
+        // 2. Portal Login (WhatsApp Step 1)
+        let loginContext = {};
+        document.getElementById('waBtn').addEventListener('click', async () => {
+            const membership_no = document.getElementById('memberNo').value;
+            const mobile = document.getElementById('memberMobile').value;
+
+            if (!membership_no || !mobile) return alert('Please enter Membership No and Mobile');
+
+            try {
+                loginContext = { membership_no, mobile };
+                const res = await PortalAPI.login(membership_no, mobile);
+                if (res.success) {
+                    addFeedItem('Portal', `OTP requested for ${membership_no}`, 'sent');
+                    document.getElementById('otpModal').style.display = 'flex';
+                }
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+
+        // 3. Portal Login (WhatsApp Step 2)
+        document.getElementById('verifyOtpBtn').addEventListener('click', async () => {
+            const otp = document.getElementById('otpInput').value;
+            try {
+                const res = await PortalAPI.verify(loginContext.membership_no, loginContext.mobile, otp);
+                if (res.success) {
+                    document.getElementById('otpModal').style.display = 'none';
+                    addFeedItem('Portal', `Member ${res.member.name} verified successfully!`, 'read');
+                    alert(`Welcome, ${res.member.name}! Portal token saved.`);
+                }
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+
+        document.getElementById('cancelOtp').addEventListener('click', () => {
+            document.getElementById('otpModal').style.display = 'none';
+        });
+
+        // 4. OTPless Integration Example
+        // Note: In a real app, you would include the OTPless SDK script
+        document.getElementById('otplessBtn').addEventListener('click', () => {
+            alert('OTPless SDK would open here. Once verified, it sends a token to /api/portal/verify-otpless.');
+            // Mocking a successful verification flow for demo
+            console.log('Mocking OTPless verify...');
+        });
+    </script>
+</body>
+
+</html>

@@ -4,22 +4,27 @@ const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
 
 const memberController = require('../controllers/memberController');
-const { requireAuth, optionalAuth } = require('../middleware/auth');
+const { requireAuth, requireAuthAdmin, optionalAuth } = require('../middleware/auth');
+const validate = require('../middleware/validate');
+const { memberSchema } = require('../validators/memberValidators');
+const apicache = require('apicache');
+const cache = apicache.middleware;
 
 const router = express.Router();
 
 // Public routes (with optional auth for admin check)
-router.get('/search', optionalAuth, memberController.search);
-router.get('/', optionalAuth, memberController.getAll);
+// Cache standard searches and directory scans to relieve database pressure
+router.get('/search', optionalAuth, cache('1 minute'), memberController.search);
+router.get('/', optionalAuth, cache('1 minute'), memberController.getAll);
 
-// Export endpoint (can be public or protected based on requirements)
-router.get('/export', memberController.exportExcel);
+// Export endpoint — admin only (contains raw Aadhaar + mobile data)
+router.get('/export', requireAuthAdmin, memberController.exportExcel);
 
 // Protected routes (require authentication)
-router.post('/', requireAuth, memberController.create);  // Create single member
+router.post('/', requireAuth, validate({ body: memberSchema }), memberController.create);  // Create single member
 router.post('/import', requireAuth, upload.single('file'), memberController.importExcel);
 router.post('/import-rows', requireAuth, memberController.importRows);
-router.put('/:id', requireAuth, memberController.update);
+router.put('/:id', requireAuth, validate({ body: memberSchema }), memberController.update);
 router.delete('/:id', requireAuth, memberController.delete);
 
 // Public routes (must be last to avoid conflict with specific paths)
