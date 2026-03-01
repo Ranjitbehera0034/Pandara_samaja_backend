@@ -25,13 +25,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x]
-
-    # Shared env for all steps that need DB or JWT
     env:
-      DATABASE_URL: postgres://test_user:test_password@localhost:5432/pandara_test_db
+      DATABASE_URL: postgres://test_user:test_password@127.0.0.1:5432/pandara_test_db
       JWT_SECRET: "ci-test-only-secret-minimum-32-chars-long!"
       NODE_ENV: test
       PGSSLMODE: disable
@@ -48,15 +43,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Lint first — fast feedback, no DB needed
       - name: Lint
         run: npm run lint
 
-      # The initial migration (1772227349976_initial-schema.js) creates ALL base tables
-      # with IF NOT EXISTS, so a single `npm run migrate up` sets up the full schema.
-      # No need for a separate psql step.
+      # Explicitly wait for Postgres to be ready on 127.0.0.1
+      - name: Wait for Postgres
+        run: |
+          until pg_isready -h 127.0.0.1 -p 5432; do
+            echo "Waiting for postgres..."
+            sleep 1
+          done
+
+      #node-pg-migrate with --verbose to capture errors in logs if it fails
       - name: Run database migrations
-        run: npm run migrate up
+        run: npm run migrate -- up --verbose
 
       - name: Run tests
         run: npm test
