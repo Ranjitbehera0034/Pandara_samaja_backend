@@ -32,11 +32,8 @@ const allowedOriginsDev = [
 const allowedOriginsProd = [
   'https://nikhilaodishapandarasamaja.in',
   'https://www.nikhilaodishapandarasamaja.in',
-  'https://pandara-samaja-backend.onrender.com',
-  'http://localhost:8000',
-  'http://127.0.0.1:8000',
-  'http://localhost:8080',
-  'http://127.0.0.1:8080'
+  'https://pandara-samaja-backend.onrender.com'
+  // ⚠️  Do NOT add localhost here. Localhost must only be in allowedOriginsDev.
 ];
 
 const allowedOrigins =
@@ -77,10 +74,11 @@ app.use('/api/', globalLimiter);
 app.use(bodyParser.json({ limit: '5mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
 
-// DASHBOARD TOOLS (PUBLIC ACCESS)
+// DASHBOARD TOOLS (super-admin protected)
 const path = require('path');
-app.use('/tools', express.static(path.join(__dirname, 'public')));
-app.get('/dashboard-demo', (req, res) => {
+const { requireAuthSuperAdmin } = require('./middleware/auth');
+app.use('/tools', requireAuthSuperAdmin, express.static(path.join(__dirname, 'public')));
+app.get('/dashboard-demo', requireAuthSuperAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'super-dashboard.html'));
 });
 
