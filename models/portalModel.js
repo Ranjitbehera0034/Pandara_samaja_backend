@@ -1,5 +1,5 @@
-// models/portalModel.js — Data layer for Member Portal features
 const pool = require('../config/db');
+const { encrypt, decrypt } = require('../utils/encryption');
 
 // ═══════════════════════════════════════════════════
 //  MEMBER LOGIN / PROFILE
@@ -16,6 +16,11 @@ exports.findByCredentials = async (membershipNo, mobile) => {
     );
     const member = res.rows[0];
     if (!member) return null;
+
+    // Decrypt sensitive data if exists
+    if (member.aadhar_no) {
+        member.aadhar_no = decrypt(member.aadhar_no);
+    }
 
     const inputMobile = (mobile || '').replace(/\D/g, '');
     if (!inputMobile) return null;
@@ -120,7 +125,11 @@ exports.getMemberProfile = async (membershipNo) => {
         `SELECT * FROM members WHERE membership_no = $1`,
         [membershipNo]
     );
-    return res.rows[0] || null;
+    const member = res.rows[0];
+    if (member && member.aadhar_no) {
+        member.aadhar_no = decrypt(member.aadhar_no);
+    }
+    return member || null;
 };
 
 /**
@@ -135,8 +144,11 @@ exports.updateMemberProfile = async (membershipNo, data) => {
     for (const field of fields) {
         if (data[field] !== undefined) {
             sets.push(`${field} = $${idx}`);
-            // family_members is JSONB, need to stringify if it's an object/array
-            if (field === 'family_members' && typeof data[field] !== 'string') {
+            // Encrypt if field is aadhar_no
+            if (field === 'aadhar_no' && data[field]) {
+                vals.push(encrypt(data[field]));
+            } else if (field === 'family_members' && typeof data[field] !== 'string') {
+                // family_members is JSONB, need to stringify if it's an object/array
                 vals.push(JSON.stringify(data[field]));
             } else {
                 vals.push(data[field]);
@@ -239,12 +251,7 @@ exports.editPost = async (postId, authorId, newText) => {
 };
 
 /**
- * Report a post
- */
-exports.reportPost = async (postId, reporterId, reason) => {
-    // Use a simple INSERT — create table if not exists
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS portal_reports (
+        `CREATE TABLE IF NOT EXISTS portal_reports (
             id SERIAL PRIMARY KEY,
             post_id INTEGER REFERENCES portal_posts(id) ON DELETE CASCADE,
             reporter_id VARCHAR(10) REFERENCES members(membership_no) ON DELETE CASCADE,
@@ -640,9 +647,10 @@ exports.deleteNotification = async (id, memberId, memberMobile) => {
 };
 
 /**
- * Get all members with subscription status for the current member
+ * Get all members with subscription status for the current member (paginated)
  */
-exports.getMembersWithSubscription = async (currentMemberId, currentMemberMobile) => {
+exports.getMembersWithSubscription = async (currentMemberId, currentMemberMobile, page = 1, limit = 20) => {
+    const offset = (page - 1) * limit;
     const res = await pool.query(
         `SELECT m.membership_no, m.name, m.village, m.district, m.profile_photo_url,
             EXISTS(
@@ -651,8 +659,9 @@ exports.getMembersWithSubscription = async (currentMemberId, currentMemberMobile
             ) AS is_subscribed
      FROM members m
      WHERE m.membership_no != $1
-     ORDER BY m.name`,
-        [currentMemberId, currentMemberMobile]
+     ORDER BY m.name
+     LIMIT $3 OFFSET $4`,
+        [currentMemberId, currentMemberMobile, limit, offset]
     );
     return res.rows;
 };
@@ -706,40 +715,51 @@ module.exports.markMessagesRead = async (receiverId, receiverMobile, senderId, s
 
 // Get chat contacts for a member (latest message per contact)
 module.exports.getChatContacts = async (memberId, memberMobile) => {
+    // Optimized single-pass query with aggregation for unread counts
     const res = await pool.query(
-        `SELECT DISTINCT ON(contact_id, contact_mobile)
-                contact_id,
-                contact_mobile,
-            contact_name,
-            contact_avatar,
-            last_message,
-            last_message_time,
-            unread_count
-         FROM(
-                SELECT
-                 CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN m.receiver_id ELSE m.sender_id END AS contact_id,
-                 CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN m.receiver_mobile ELSE m.sender_mobile END AS contact_mobile,
-                CASE WHEN (m.sender_id = $1 AND m.sender_mobile = $2) THEN r.name ELSE s.name END AS contact_name,
-                CASE WHEN (m.sender_id = $1 AND m.sender_mobile = $2) THEN 
-                    COALESCE((SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(r.family_members) f WHERE (f->>'mobile')::text = m.receiver_mobile), r.profile_photo_url)
-                ELSE 
-                    COALESCE((SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(s.family_members) f WHERE (f->>'mobile')::text = m.sender_mobile), s.profile_photo_url)
-                END AS contact_avatar,
-                m.content AS last_message,
-                m.created_at AS last_message_time,
-                (SELECT COUNT(*) FROM portal_messages
-                  WHERE sender_id = CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN m.receiver_id ELSE m.sender_id END
-                    AND sender_mobile = CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN m.receiver_mobile ELSE m.sender_mobile END
-                    AND receiver_id = $1
-                    AND receiver_mobile = $2
-                    AND read = FALSE) AS unread_count
-             FROM portal_messages m
-             JOIN members s ON s.membership_no = m.sender_id
-             JOIN members r ON r.membership_no = m.receiver_id
-             WHERE (m.sender_id = $1 AND m.sender_mobile = $2) OR (m.receiver_id = $1 AND m.receiver_mobile = $2)
-             ORDER BY m.created_at DESC
-        ) sub
-         ORDER BY contact_id, contact_mobile, last_message_time DESC`,
+        `WITH latest_messages AS (
+            SELECT DISTINCT ON (
+                LEAST(sender_id || '-' || COALESCE(sender_mobile,''), receiver_id || '-' || COALESCE(receiver_mobile,'')),
+                GREATEST(sender_id || '-' || COALESCE(sender_mobile,''), receiver_id || '-' || COALESCE(receiver_mobile,''))
+            ) 
+            m.*,
+            CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN m.receiver_id ELSE m.sender_id END AS contact_id,
+            CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN m.receiver_mobile ELSE m.sender_mobile END AS contact_mobile,
+            CASE WHEN m.sender_id = $1 AND m.sender_mobile = $2 THEN r.name ELSE s.name END AS contact_name,
+            CASE WHEN (m.sender_id = $1 AND m.sender_mobile = $2) THEN
+                COALESCE((SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(r.family_members) f WHERE (f->>'mobile')::text = m.receiver_mobile), r.profile_photo_url)
+            ELSE
+                COALESCE((SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(s.family_members) f WHERE (f->>'mobile')::text = m.sender_mobile), s.profile_photo_url)
+            END AS contact_avatar
+            FROM portal_messages m
+            JOIN members s ON s.membership_no = m.sender_id
+            JOIN members r ON r.membership_no = m.receiver_id
+            WHERE (m.sender_id = $1 AND m.sender_mobile = $2) OR (m.receiver_id = $1 AND m.receiver_mobile = $2)
+            ORDER BY 
+                LEAST(sender_id || '-' || COALESCE(sender_mobile,''), receiver_id || '-' || COALESCE(receiver_mobile,'')),
+                GREATEST(sender_id || '-' || COALESCE(sender_mobile,''), receiver_id || '-' || COALESCE(receiver_mobile,'')),
+                m.created_at DESC
+        ),
+        unread_counts AS (
+            SELECT 
+                sender_id AS contact_id, 
+                sender_mobile AS contact_mobile, 
+                COUNT(*) as count
+            FROM portal_messages
+            WHERE receiver_id = $1 AND receiver_mobile = $2 AND read = FALSE
+            GROUP BY sender_id, sender_mobile
+        )
+        SELECT 
+            lm.contact_id, 
+            lm.contact_mobile, 
+            lm.contact_name, 
+            lm.contact_avatar, 
+            lm.content AS last_message, 
+            lm.created_at AS last_message_time,
+            COALESCE(uc.count, 0) AS unread_count
+        FROM latest_messages lm
+        LEFT JOIN unread_counts uc ON lm.contact_id = uc.contact_id AND lm.contact_mobile = uc.contact_mobile
+        ORDER BY last_message_time DESC`,
         [memberId, memberMobile]
     );
     return res.rows;

@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { encrypt, decrypt } = require('../utils/encryption');
 const ExcelJS = require('exceljs');
 const Cursor = require('pg-cursor');
 const format = require('pg-format');
@@ -59,7 +60,7 @@ exports.create = async (data) => {
     data.taluka ?? null,
     data.panchayat ?? null,
     data.village ?? null,
-    data.aadhar_no ?? null,
+    encrypt(data.aadhar_no) ?? null,
     JSON.stringify(familyMembers),
     data.address ?? null
   ];
@@ -75,7 +76,11 @@ exports.create = async (data) => {
 
 exports.getAll = async (limit = 20, offset = 0) => {
   const query = "SELECT * FROM members ORDER BY district, taluka, panchayat, name LIMIT $1 OFFSET $2";
-  return pool.query(query, [limit, offset]);
+  const res = await pool.query(query, [limit, offset]);
+  res.rows.forEach(r => {
+    if (r.aadhar_no) r.aadhar_no = decrypt(r.aadhar_no);
+  });
+  return res;
 };
 
 exports.getTotalCount = async () => {
@@ -92,16 +97,24 @@ exports.getAllByLocation = async (district, taluka, panchayat) => {
 
 exports.search = async (keyword, limit = 20, offset = 0) => {
   const q = `%${keyword}%`;
-  return pool.query(
+  const res = await pool.query(
     "SELECT * FROM members WHERE (LOWER(name) LIKE LOWER($1) OR mobile LIKE $1 OR membership_no LIKE $1) ORDER BY name LIMIT $2 OFFSET $3",
     [q, limit, offset]
   );
+  res.rows.forEach(r => {
+    if (r.aadhar_no) r.aadhar_no = decrypt(r.aadhar_no);
+  });
+  return res;
 };
 
 exports.getOne = async (id) => {
   // Use membership_no as the primary identifier since 'id' column does not exist
   const res = await pool.query("SELECT * FROM members WHERE membership_no = $1", [id]);
-  return res.rows[0];
+  const member = res.rows[0];
+  if (member && member.aadhar_no) {
+    member.aadhar_no = decrypt(member.aadhar_no);
+  }
+  return member;
 };
 
 exports.update = async (id, data) => {
@@ -140,7 +153,7 @@ exports.update = async (id, data) => {
     merged.taluka ?? null,
     merged.panchayat ?? null,
     merged.village ?? null,
-    merged.aadhar_no ?? null,
+    encrypt(merged.aadhar_no) ?? null,
     JSON.stringify(familyMembers),
     merged.address ?? null,
     id
@@ -199,9 +212,10 @@ exports.exportExcel = async (stream) => {
     const batchSize = 500;
     let rows;
     while ((rows = await cursor.read(batchSize)).length) {
-      // Convert family_members JSONB to readable text for Excel
+      // Convert family_members JSONB and decrypt Aadhar for Excel
       const mappedRows = rows.map(r => ({
         ...r,
+        aadhar_no: r.aadhar_no ? decrypt(r.aadhar_no) : null,
         family_members_text: Array.isArray(r.family_members)
           ? r.family_members.map(fm => `${fm.name || ''} (${fm.relation || ''}, Age: ${fm.age || ''})`).join('; ')
           : ''
@@ -240,7 +254,7 @@ exports.bulkUpsertMembers = async (rows) => {
       r.taluka,
       r.panchayat,
       r.village,
-      r.aadhar_no ?? null,
+      encrypt(r.aadhar_no?.toString()) ?? null,
       JSON.stringify(fm),
       r.address ?? null
     ];

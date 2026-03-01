@@ -46,15 +46,20 @@ io.on('connection', (socket) => {
   console.log('🔌 Socket connected:', socket.id);
 
   // ─── Join Chat ───
-  // Client sends: { mobile: string } (userId is taken from token)
-  socket.on('join_chat', ({ mobile }) => {
+  // No parameters from client; identity is extracted from verified JWT
+  socket.on('join_chat', () => {
     const userId = socket.decoded.membership_no || socket.decoded.id;
-    if (!userId) return;
-    const cleanMobile = (mobile || '').replace(/\D/g, '');
-    socket.userId = userId;
-    socket.userMobile = cleanMobile;
+    const userMobile = (socket.decoded.mobile || '').replace(/\D/g, '');
 
-    const sessionKey = `${userId}-${cleanMobile}`;
+    if (!userId || !userMobile) {
+      console.warn('❌ Socket join_chat failed: Missing userId or mobile in token');
+      return;
+    }
+
+    socket.userId = userId;
+    socket.userMobile = userMobile;
+
+    const sessionKey = `${userId}-${userMobile}`;
 
     // Track online status
     if (!onlineUsers.has(sessionKey)) {
