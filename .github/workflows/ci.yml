@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:15
@@ -30,25 +30,41 @@ jobs:
         node-version: [18.x, 20.x]
 
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
+      - uses: actions/checkout@v4
 
-    - name: Run Database Migrations
-      env:
-        DATABASE_URL: postgres://test_user:test_password@localhost:5432/pandara_test_db
-        PGSSLMODE: disable
-      run: npm run migrate up
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
 
-    - name: Run tests
-      run: npm test
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Run linter
-      run: npm run lint
+      # Lint before anything else so failures are visible immediately
+      - name: Run linter
+        run: npm run lint
+
+      # Apply the base DDL schema (CREATE TABLE IF NOT EXISTS) first,
+      # then run node-pg-migrate for incremental migrations on top.
+      - name: Apply base schema
+        env:
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/pandara_test_db
+          PGSSLMODE: disable
+        run: psql $DATABASE_URL -f schema/users.sql
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/pandara_test_db
+          PGSSLMODE: disable
+        run: npm run migrate up
+
+      # Tests need JWT_SECRET set or the server refuses to start (by design).
+      # This secret is only for CI; it is NOT used anywhere in production.
+      - name: Run tests
+        env:
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/pandara_test_db
+          JWT_SECRET: "ci-test-only-secret-at-least-32-chars-long!"
+          NODE_ENV: test
+          PGSSLMODE: disable
+        run: npm test

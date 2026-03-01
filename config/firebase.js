@@ -17,8 +17,8 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
         serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
         console.log('✅ Firebase: Loaded from FIREBASE_SERVICE_ACCOUNT env var');
-    } catch (err) {
-        console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT env var:", err);
+    } catch (_err) {
+        console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT env var:", _err);
     }
 }
 
@@ -30,8 +30,8 @@ if (!serviceAccount && process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
             serviceAccount = JSON.parse(fs.readFileSync(filePath, 'utf8'));
             console.log(`✅ Firebase: Loaded from ${filePath}`);
         }
-    } catch (err) {
-        console.error("Failed to load from FIREBASE_SERVICE_ACCOUNT_PATH:", err);
+    } catch (_err) {
+        console.error("Failed to load from FIREBASE_SERVICE_ACCOUNT_PATH:", _err);
     }
 }
 
@@ -53,7 +53,7 @@ if (!serviceAccount) {
     try {
         serviceAccount = require('./firebase-service-account.json');
         console.log('✅ Firebase: Loaded from local config directory');
-    } catch (err) {
+    } catch (_err) {
         console.warn("⚠️ Firebase: No service account found. Firebase Auth will not work.");
         console.warn("   Set FIREBASE_SERVICE_ACCOUNT_PATH or upload secret file to Render.");
     }
@@ -70,7 +70,7 @@ if (serviceAccount) {
         firebaseAdmin = admin.initializeApp({
             credential: admin.credential.applicationDefault()
         });
-    } catch (err) {
+    } catch (_err) {
         console.error("❌ Firebase: Could not initialize. Firebase login will not work.");
         firebaseAdmin = null;
     }
