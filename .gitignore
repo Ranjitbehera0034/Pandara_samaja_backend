@@ -16,3 +16,25 @@ uploads/
 dist/
 coverage/
 *.log
+
+# Debug & one-off scripts — should never be in production repo
+debug-login.js
+reset-admin-password.js
+change-admin-password.js
+check-email-config.js
+test-login.html
+test-auth-flow.sh
+seed-test-data.js
+app_backup.js
+patch.js
+verify-env.js
+
+# Migration one-offs (use migrations/ folder instead)
+mig-posts.js
+mig-reports.js
+mig-super-admin-mfa.js
+migrate_candidates.js
+migration.js
+update-admin-db.js
+setup-db.js
+setup-db-alt.js

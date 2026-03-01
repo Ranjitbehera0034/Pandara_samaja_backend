@@ -4,7 +4,7 @@ const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
 
 const memberController = require('../controllers/memberController');
-const { requireAuth, optionalAuth } = require('../middleware/auth');
+const { requireAuth, requireAuthAdmin, optionalAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const { memberSchema } = require('../validators/memberValidators');
 const apicache = require('apicache');
@@ -17,8 +17,8 @@ const router = express.Router();
 router.get('/search', optionalAuth, cache('1 minute'), memberController.search);
 router.get('/', optionalAuth, cache('1 minute'), memberController.getAll);
 
-// Export endpoint (can be public or protected based on requirements)
-router.get('/export', memberController.exportExcel);
+// Export endpoint — admin only (contains raw Aadhaar + mobile data)
+router.get('/export', requireAuthAdmin, memberController.exportExcel);
 
 // Protected routes (require authentication)
 router.post('/', requireAuth, validate({ body: memberSchema }), memberController.create);  // Create single member

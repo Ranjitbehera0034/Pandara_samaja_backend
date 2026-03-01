@@ -5,13 +5,13 @@ const {
   sendPromotionNotification
 } = require('../utils/emailService');
 
-// JWT secret key - should be in environment variables
-if (!process.env.JWT_SECRET) {
-  console.warn("⚠️  WARNING: JWT_SECRET is not defined in .env file!");
-  console.warn("⚠️  Using fallback secret for development only.");
-  console.warn("⚠️  Please add JWT_SECRET to your .env file for production!");
+// JWT secret key - must be set via environment variables
+// (Startup will be refused by middleware/auth.js if this is missing)
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET is not defined in environment. Refusing to start.');
+  process.exit(1);
 }
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 class AuthController {
   // Login

@@ -4,9 +4,19 @@ const AuthController = require('../controllers/authController');
 const { requireAuth, requireAuthSuperAdmin } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const { adminLoginSchema, registerAdminSchema } = require('../validators/authValidators');
+const rateLimit = require('express-rate-limit');
+
+// Strict rate limiter for login: max 10 attempts per 15 minutes per IP
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Too many login attempts. Please try again in 15 minutes.' }
+});
 
 // Public routes
-router.post('/login', validate({ body: adminLoginSchema }), AuthController.login);
+router.post('/login', loginLimiter, validate({ body: adminLoginSchema }), AuthController.login);
 
 // Protected routes (Only Super Admin can register/manage users/admins)
 router.post('/register', requireAuthSuperAdmin, validate({ body: registerAdminSchema }), AuthController.register);

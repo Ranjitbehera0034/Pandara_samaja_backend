@@ -123,21 +123,22 @@ Allowed origins are configured in `app.js`:
 
 ### Default Admin Account
 
-```
-Username: admin
-Password: admin123
+There is **no default admin account**. For a fresh deployment, create the first super_admin using:
+
+```bash
+ADMIN_USERNAME=yourname ADMIN_PASSWORD=<strong-12-char-password> node scripts/create-first-admin.js
 ```
 
-**⚠️ IMPORTANT:** Change this password immediately after first deployment!
+> ⚠️ **Never** commit credentials to source control. This script reads passwords from environment variables only.
 
 ### Using Protected Endpoints
 
 1. **Login to get token:**
 ```javascript
-const response = await fetch('http://localhost:5000/api/auth/login', {
+const response = await fetch('http://localhost:5000/api/v1/auth/login', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ username: 'admin', password: 'admin123' })
+  body: JSON.stringify({ username: 'admin', password: 'YOUR_PASSWORD' })
 });
 const { token } = await response.json();
 ```
