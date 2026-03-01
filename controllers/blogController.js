@@ -5,7 +5,10 @@ exports.getAll = async (req, res, next) => {
     const {
       rows
     } = await Post.getAll();
-    res.json(rows);
+    res.json({
+      success: true,
+      posts: rows
+    });
   } catch (err) {
     console.error('Get Posts Error:', err);
     next(err);

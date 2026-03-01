@@ -56,19 +56,23 @@ exports.getAll = async (req, res) => {
   // Check if search query parameter exists
   if (req.query.search) {
     const data = await model.search(req.query.search, limit, offset);
+    const rows = maskRows(data.rows, req.user?.role === 'admin');
     // Count for search is complex; for now just returning the masked rows
     return res.json({
       success: true,
-      rows: maskRows(data.rows, req.user?.role === 'admin')
+      rows: rows,
+      members: rows
     });
   }
 
   const data = await model.getAll(limit, offset);
   const totalItems = await model.getTotalCount();
+  const rows = maskRows(data.rows, req.user?.role === 'admin');
 
   res.json({
     success: true,
-    rows: maskRows(data.rows, req.user?.role === 'admin'),
+    rows: rows,
+    members: rows,
     meta: {
       totalItems,
       totalPages: Math.ceil(totalItems / limit),

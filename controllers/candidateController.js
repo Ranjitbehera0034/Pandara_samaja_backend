@@ -5,7 +5,10 @@ const model = require('../models/candidateModel');
 exports.getAll = async (req, res) => {
   const gender = req.query.gender;
   const result = gender ? await model.getAllByGender(gender) : await model.getAll();
-  res.json(result.rows);
+  res.json({
+    success: true,
+    candidates: result.rows
+  });
 };
 exports.getOne = async (req, res) => {
   const result = await model.getById(req.params.id);

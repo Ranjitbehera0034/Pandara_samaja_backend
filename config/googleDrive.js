@@ -119,8 +119,8 @@ async function uploadFile(file) {
     });
   }
 
-  // 4. Return a direct link using lh3.googleusercontent.com mapping for static image serving with robust CORS
-  return `https://lh3.googleusercontent.com/d/${fileId}`;
+  // 4. Return a direct link using drive.google.com/uc service which is standard for image embedding
+  return `https://drive.google.com/uc?id=${fileId}`;
 }
 
 module.exports = { uploadFile };

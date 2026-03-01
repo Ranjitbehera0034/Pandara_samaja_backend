@@ -105,6 +105,10 @@ app.use('/api/v1/admin', require('./routes/adminRoutes'));
 app.use('/api/v1/leaders', require('./routes/leaderRoutes')(upload));
 app.use('/api/v1/webhooks', require('./routes/webhookRoutes'));
 
+// Image proxy — streams Google Drive images server-side to avoid 403 hotlink blocks
+app.use('/api/image-proxy', require('./routes/imageProxyRoutes'));
+app.use('/api/v1/image-proxy', require('./routes/imageProxyRoutes'));
+
 /* ─── Global Error Handler ────────────────────────────── */
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);
