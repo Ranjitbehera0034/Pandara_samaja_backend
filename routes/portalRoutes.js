@@ -5,7 +5,7 @@ const portalCtrl = require('../controllers/portalController');
 const { requirePortalAuth } = require('../middleware/portalAuth');
 const rateLimit = require('express-rate-limit');
 const validate = require('../middleware/validate');
-const { portalLoginSchema, portalVerifyOtpSchema, portalVerifyOtplessSchema, portalVerifyFirebaseSchema } = require('../validators/portalValidators');
+const { portalVerifyFirebaseSchema } = require('../validators/portalValidators');
 
 // Specific rate limit for login attempts to prevent brute force/OTP enumeration
 const loginRateLimiter = rateLimit({

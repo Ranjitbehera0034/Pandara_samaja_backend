@@ -1,7 +1,6 @@
 // routes/candidateRoutes.js
 const express = require('express');
 const controller = require('../controllers/candidateController');
-const { requireAuth } = require('../middleware/auth');
 const { requireAnyAuth } = require('../middleware/anyAuth');
 
 /**
