@@ -5,7 +5,6 @@ const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`📍 API Base URL: http://localhost:${PORT}/api/v1`);
-  console.log(`⚠️  SECURITY: Change default admin password immediately!`);
 });
 
 // Initialize Socket.io
@@ -13,6 +12,27 @@ const io = require('socket.io')(server, {
   cors: {
     origin: allowedOrigins,
     methods: ["GET", "POST"]
+  }
+});
+
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// Socket.io Authentication Middleware
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return next(new Error('Authentication error: No token provided'));
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    // Standardize user data from token
+    socket.decoded = decoded;
+    next();
+  } catch (err) {
+    console.error('Socket Auth Error:', err.message);
+    next(new Error('Authentication error: Invalid token'));
   }
 });
 
@@ -26,8 +46,9 @@ io.on('connection', (socket) => {
   console.log('🔌 Socket connected:', socket.id);
 
   // ─── Join Chat ───
-  // Client sends: { userId: membership_no, mobile: string }
-  socket.on('join_chat', ({ userId, mobile }) => {
+  // Client sends: { mobile: string } (userId is taken from token)
+  socket.on('join_chat', ({ mobile }) => {
+    const userId = socket.decoded.membership_no || socket.decoded.id;
     if (!userId) return;
     const cleanMobile = (mobile || '').replace(/\D/g, '');
     socket.userId = userId;
@@ -51,7 +72,10 @@ io.on('connection', (socket) => {
   });
 
   // ─── Send Message (real-time + persist) ───
-  socket.on('send_message', async ({ senderId, senderMobile, receiverId, receiverMobile, content, type }) => {
+  socket.on('send_message', async ({ senderMobile, receiverId, receiverMobile, content, type }) => {
+    // Authenticated sender ID from token
+    const senderId = socket.decoded.membership_no || socket.decoded.id;
+
     if (!senderId || !receiverId || !content) return;
 
     try {

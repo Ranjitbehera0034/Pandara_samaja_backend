@@ -49,13 +49,33 @@ exports.create = async (req, res, next) => {
   }
 };
 exports.getAll = async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const offset = (page - 1) * limit;
+
   // Check if search query parameter exists
   if (req.query.search) {
-    const data = await model.search(req.query.search);
-    return res.json(maskRows(data.rows, req.user?.role === 'admin'));
+    const data = await model.search(req.query.search, limit, offset);
+    // Count for search is complex; for now just returning the masked rows
+    return res.json({
+      success: true,
+      rows: maskRows(data.rows, req.user?.role === 'admin')
+    });
   }
-  const data = await model.getAll();
-  res.json(maskRows(data.rows, req.user?.role === 'admin'));
+
+  const data = await model.getAll(limit, offset);
+  const totalItems = await model.getTotalCount();
+
+  res.json({
+    success: true,
+    rows: maskRows(data.rows, req.user?.role === 'admin'),
+    meta: {
+      totalItems,
+      totalPages: Math.ceil(totalItems / limit),
+      currentPage: page,
+      limit
+    }
+  });
 };
 exports.getByLocation = async (req, res) => {
   const {
@@ -174,7 +194,7 @@ exports.importExcel = async (req, res, next) => {
     console.error('Excel import error:', err);
     next(err);
   } finally {
-    await fs.unlink(filePath).catch(() => {});
+    await fs.unlink(filePath).catch(() => { });
   }
 };
 const MAXLEN = {

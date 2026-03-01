@@ -5,7 +5,11 @@ const { uploadFile } = require('../config/googleDrive');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebase');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error('FATAL: JWT_SECRET environment variable is not set. Refusing to start.');
+    process.exit(1);
+}
 const PORTAL_JWT_EXPIRES = process.env.PORTAL_JWT_EXPIRES || '7d';
 
 /**
@@ -82,12 +86,9 @@ exports.loginWithFirebase = async (req, res, next) => {
                 panchayat: member.panchayat,
                 village: member.village,
                 address: member.address,
-                aadhar_no: member.aadhar_no,
-                male: member.male,
-                female: member.female,
-                head_gender: member.head_gender,
-                family_members: member.family_members,
-                profile_photo_url: member.profile_photo_url
+                profile_photo_url: member.profile_photo_url,
+                // Mask Aadhaar for security
+                aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null
             },
             loggedInUser: result.matchedUser
         });
@@ -135,12 +136,9 @@ exports.getProfile = async (req, res) => {
                 panchayat: member.panchayat,
                 village: member.village,
                 address: member.address,
-                aadhar_no: member.aadhar_no,
-                male: member.male,
-                female: member.female,
-                head_gender: member.head_gender,
-                family_members: member.family_members,
-                profile_photo_url: profilePhotoUrl
+                profile_photo_url: profilePhotoUrl,
+                // Mask Aadhaar for security
+                aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null
             }
         });
     } catch (error) {
@@ -183,12 +181,9 @@ exports.updateProfile = async (req, res) => {
                 panchayat: updated.panchayat,
                 village: updated.village,
                 address: updated.address,
-                aadhar_no: updated.aadhar_no,
-                male: updated.male,
-                female: updated.female,
-                head_gender: updated.head_gender,
-                family_members: updated.family_members,
-                profile_photo_url: updated.profile_photo_url
+                profile_photo_url: updated.profile_photo_url,
+                // Mask Aadhaar for security
+                aadhar_no: updated.aadhar_no ? `********${updated.aadhar_no.slice(-4)}` : null
             }
         });
     } catch (error) {

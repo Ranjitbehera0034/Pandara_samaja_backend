@@ -73,8 +73,14 @@ exports.create = async (data) => {
   return res.rows[0];
 };
 
-exports.getAll = async () => {
-  return pool.query("SELECT * FROM members ORDER BY district, taluka, panchayat, name");
+exports.getAll = async (limit = 20, offset = 0) => {
+  const query = "SELECT * FROM members ORDER BY district, taluka, panchayat, name LIMIT $1 OFFSET $2";
+  return pool.query(query, [limit, offset]);
+};
+
+exports.getTotalCount = async () => {
+  const res = await pool.query("SELECT COUNT(*) FROM members");
+  return parseInt(res.rows[0].count, 10);
 };
 
 exports.getAllByLocation = async (district, taluka, panchayat) => {
@@ -84,11 +90,11 @@ exports.getAllByLocation = async (district, taluka, panchayat) => {
   );
 };
 
-exports.search = async (keyword) => {
+exports.search = async (keyword, limit = 20, offset = 0) => {
   const q = `%${keyword}%`;
   return pool.query(
-    "SELECT * FROM members WHERE LOWER(name) LIKE LOWER($1) OR mobile LIKE $1 OR membership_no LIKE $1",
-    [q]
+    "SELECT * FROM members WHERE (LOWER(name) LIKE LOWER($1) OR mobile LIKE $1 OR membership_no LIKE $1) ORDER BY name LIMIT $2 OFFSET $3",
+    [q, limit, offset]
   );
 };
 
