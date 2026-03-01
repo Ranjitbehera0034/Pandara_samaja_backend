@@ -12,7 +12,7 @@ COMMENT ON COLUMN public.members.head_gender IS 'Gender of the head of family (M
 -- Description: Add aadhar_no, family_members (JSONB), and address columns to members table
 
 ALTER TABLE public.members
-  ADD COLUMN IF NOT EXISTS aadhar_no    VARCHAR(12),
+  ADD COLUMN IF NOT EXISTS aadhar_no    TEXT,
   ADD COLUMN IF NOT EXISTS family_members JSONB DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS address       TEXT;
 

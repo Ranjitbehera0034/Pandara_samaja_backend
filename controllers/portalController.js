@@ -811,15 +811,20 @@ exports.getSubscriptions = async (req, res) => {
 
 /**
  * GET /api/portal/members
- * Get all members with subscription status
+ * Get all members with subscription status (paginated)
  */
 exports.getMembers = async (req, res) => {
     try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+
         const members = await portal.getMembersWithSubscription(
             req.portalMember.membership_no,
-            req.portalMember.mobile
+            req.portalMember.mobile,
+            page,
+            limit
         );
-        res.json({ success: true, members });
+        res.json({ success: true, members, page, limit });
     } catch (error) {
         console.error('Get portal members error:', error);
         res.status(500).json({ success: false, message: 'Failed to load members' });

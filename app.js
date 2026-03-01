@@ -85,6 +85,16 @@ app.get('/dashboard-demo', requireAuthSuperAdmin, (req, res) => {
 /* ─── 4. Upload folder + multer ───────────────────────────── */
 const upload = multer({ storage: multer.memoryStorage() });
 
+/* ─── API Routes (Compatibility Alias) ────────────────────── */
+// These routes are redundant with /api/v1/ but are required for older client builds
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/candidates', require('./routes/candidateRoutes')(upload));
+app.use('/api/members', require('./routes/memberRoutes'));
+app.use('/api/posts', require('./routes/blogRoutes')(upload));
+app.use('/api/portal', require('./routes/portalRoutes')(upload));
+app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/leaders', require('./routes/leaderRoutes')(upload));
+
 /* ─── API Version 1 (v1) routes ───────────────────────────── */
 app.use('/api/v1/auth', require('./routes/authRoutes'));
 app.use('/api/v1/candidates', require('./routes/candidateRoutes')(upload));
