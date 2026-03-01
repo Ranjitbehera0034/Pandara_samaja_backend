@@ -54,7 +54,10 @@ jobs:
             sleep 1
           done
 
-      #node-pg-migrate with --verbose to capture errors in logs if it fails
+      - name: Debug DB connectivity
+        run: node -e "const { Pool } = require('pg'); const p = new Pool({ connectionString: process.env.DATABASE_URL }); p.query('SELECT 1').then(() => { console.log('✅ DB Connected'); process.exit(0); }).catch(e => { console.error(e); process.exit(1); })"
+
+      # node-pg-migrate with --verbose to capture errors in logs if it fails
       - name: Run database migrations
         run: npm run migrate -- up --verbose
 
