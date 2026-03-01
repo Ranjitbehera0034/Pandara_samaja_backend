@@ -38,3 +38,4 @@ migration.js
 update-admin-db.js
 setup-db.js
 setup-db-alt.js
+.claude/
