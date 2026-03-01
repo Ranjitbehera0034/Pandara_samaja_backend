@@ -29,6 +29,13 @@ jobs:
       matrix:
         node-version: [18.x, 20.x]
 
+    # Shared env for all steps that need DB or JWT
+    env:
+      DATABASE_URL: postgres://test_user:test_password@localhost:5432/pandara_test_db
+      JWT_SECRET: "ci-test-only-secret-minimum-32-chars-long!"
+      NODE_ENV: test
+      PGSSLMODE: disable
+
     steps:
       - uses: actions/checkout@v4
 
@@ -41,30 +48,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Lint before anything else so failures are visible immediately
-      - name: Run linter
+      # Lint first — fast feedback, no DB needed
+      - name: Lint
         run: npm run lint
 
-      # Apply the base DDL schema (CREATE TABLE IF NOT EXISTS) first,
-      # then run node-pg-migrate for incremental migrations on top.
-      - name: Apply base schema
-        env:
-          DATABASE_URL: postgres://test_user:test_password@localhost:5432/pandara_test_db
-          PGSSLMODE: disable
-        run: psql $DATABASE_URL -f schema/users.sql
-
+      # The initial migration (1772227349976_initial-schema.js) creates ALL base tables
+      # with IF NOT EXISTS, so a single `npm run migrate up` sets up the full schema.
+      # No need for a separate psql step.
       - name: Run database migrations
-        env:
-          DATABASE_URL: postgres://test_user:test_password@localhost:5432/pandara_test_db
-          PGSSLMODE: disable
         run: npm run migrate up
 
-      # Tests need JWT_SECRET set or the server refuses to start (by design).
-      # This secret is only for CI; it is NOT used anywhere in production.
       - name: Run tests
-        env:
-          DATABASE_URL: postgres://test_user:test_password@localhost:5432/pandara_test_db
-          JWT_SECRET: "ci-test-only-secret-at-least-32-chars-long!"
-          NODE_ENV: test
-          PGSSLMODE: disable
         run: npm test
