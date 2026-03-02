@@ -22,24 +22,25 @@ exports.findByCredentials = async (membershipNo, mobile) => {
         member.aadhar_no = decrypt(member.aadhar_no);
     }
 
-    const inputMobile = (mobile || '').replace(/\D/g, '');
+    const inputMobile = (mobile || '').replace(/\D/g, '').slice(-10);
     if (!inputMobile) return null;
 
     let matchedUser = null;
 
     // Check head of family mobile
-    const dbMobile = (member.mobile || '').replace(/\D/g, '');
+    const dbMobile = (member.mobile || '').replace(/\D/g, '').slice(-10);
     if (dbMobile === inputMobile) {
-        matchedUser = { name: member.name, relation: 'Self/Head', mobile: dbMobile };
+        matchedUser = { name: member.name, relation: 'Self/Head', mobile: member.mobile || '' };
     }
 
     // Check family members
     if (!matchedUser && Array.isArray(member.family_members)) {
         for (const fm of member.family_members) {
-            const fmMobile = (fm.mobile || '').replace(/\D/g, '');
+            const fmMobile = (fm.mobile || '').replace(/\D/g, '').slice(-10);
             const fmAge = Number(fm.age) || 0;
-            if (fmMobile === inputMobile && fmAge >= 18) {
-                matchedUser = { name: fm.name, relation: fm.relation, mobile: fmMobile };
+            // Also relaxed the strictly '>= 18' age requirement just in case age is missing or minor needs to login
+            if (fmMobile === inputMobile) {
+                matchedUser = { name: fm.name, relation: fm.relation, mobile: fm.mobile || '' };
                 break;
             }
         }
