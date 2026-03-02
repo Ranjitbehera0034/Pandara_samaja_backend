@@ -8,7 +8,7 @@ require('dotenv').config();
 const app = express();
 
 /* ─── 1. Allowed-origin lists ──────────────────────────────── */
-const allowedOriginsDev = [
+const allowedOrigins = [
   'http://localhost:5000',
   'http://127.0.0.1:5000',
   'http://localhost:5500',
@@ -26,19 +26,11 @@ const allowedOriginsDev = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:4173',
-  'http://127.0.0.1:4173'
-];
-
-const allowedOriginsProd = [
+  'http://127.0.0.1:4173',
   'https://nikhilaodishapandarasamaja.in',
   'https://www.nikhilaodishapandarasamaja.in',
   'https://pandara-samaja-backend.onrender.com'
-  // ⚠️  Do NOT add localhost here. Localhost must only be in allowedOriginsDev.
 ];
-
-const allowedOrigins =
-  process.env.NODE_ENV === 'production' ? allowedOriginsProd
-    : allowedOriginsDev;
 
 /* ─── 2. CORS middleware ───────────────────────────────────── */
 app.use(

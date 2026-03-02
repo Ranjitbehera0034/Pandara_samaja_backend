@@ -10,8 +10,10 @@ const server = app.listen(PORT, () => {
 // Initialize Socket.io
 const io = require('socket.io')(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"]
+    origin: "*", // Allows any origin to connect, which is usually best practice with WebSockets to avoid proxy stringency
+    methods: ["GET", "POST"],
+    transports: ["websocket", "polling"],
+    credentials: true // Ensures headers pass smoothly
   }
 });
 
