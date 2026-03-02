@@ -30,7 +30,7 @@ exports.findByCredentials = async (membershipNo, mobile) => {
     // Check head of family mobile
     const dbMobile = (member.mobile || '').replace(/\D/g, '').slice(-10);
     if (dbMobile === inputMobile) {
-        matchedUser = { name: member.name, relation: 'Self/Head', mobile: member.mobile || '' };
+        matchedUser = { name: member.name, relation: 'Self/Head', mobile: member.mobile || '', profile_photo_url: member.profile_photo_url || null, gender: member.head_gender || null };
     }
 
     // Check family members
@@ -40,7 +40,7 @@ exports.findByCredentials = async (membershipNo, mobile) => {
             const fmAge = Number(fm.age) || 0;
             // Also relaxed the strictly '>= 18' age requirement just in case age is missing or minor needs to login
             if (fmMobile === inputMobile) {
-                matchedUser = { name: fm.name, relation: fm.relation, mobile: fm.mobile || '' };
+                matchedUser = { name: fm.name, relation: fm.relation, mobile: fm.mobile || '', profile_photo_url: fm.profile_photo_url || null, gender: fm.gender || null };
                 break;
             }
         }
