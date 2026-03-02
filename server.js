@@ -10,7 +10,13 @@ const server = app.listen(PORT, () => {
 // Initialize Socket.io
 const io = require('socket.io')(server, {
   cors: {
-    origin: "*", // Allows any origin to connect, which is usually best practice with WebSockets to avoid proxy stringency
+    origin(origin, cb) {
+      if (!origin || origin === 'null') return cb(null, true);
+      if (allowedOrigins && allowedOrigins.includes(origin)) return cb(null, true);
+      const regex = /^https?:\/\/(?:.+\.)?nikhilaodishapandarasamaja\.in$/i;
+      if (regex.test(origin)) return cb(null, true);
+      return cb(new Error('Not allowed by CORS: ' + origin));
+    },
     methods: ["GET", "POST"],
     transports: ["websocket", "polling"],
     credentials: true // Ensures headers pass smoothly
@@ -73,7 +79,7 @@ io.on('connection', (socket) => {
     socket.join(`user:${sessionKey}`);
 
     // Broadcast online status
-    io.emit('user_online', { userId, mobile: cleanMobile });
+    io.emit('user_online', { userId, mobile: userMobile });
 
     console.log(`👤 User ${sessionKey} joined (${onlineUsers.get(sessionKey).size} connections)`);
   });
