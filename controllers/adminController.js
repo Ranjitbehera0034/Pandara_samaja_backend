@@ -213,11 +213,11 @@ exports.updateCandidateStatus = async (req, res, next) => {
     const {
       candidateId
     } = req.params;
-    const { status } = req.body;
+    const { status, admin_comments } = req.body;
     const adminUsername = req.user ? req.user.username : 'admin';
     const userRole = req.user ? req.user.role : 'admin';
 
-    if (!['approved', 'pending', 'rejected'].includes(status)) {
+    if (!['approved', 'pending', 'rejected', 'evidence_requested'].includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
 
@@ -227,12 +227,13 @@ exports.updateCandidateStatus = async (req, res, next) => {
       finalStatus = 'verified';
     }
 
-    const result = await pool.query(
-      `UPDATE candidates 
-       SET status = $1, verified_by = $2, verified_at = CURRENT_TIMESTAMP 
-       WHERE id = $3 RETURNING *`,
-      [finalStatus, adminUsername, candidateId]
-    );
+    const query = `
+       UPDATE candidates 
+       SET status = $1, verified_by = $2, verified_at = CURRENT_TIMESTAMP, admin_comments = COALESCE($3, admin_comments)
+       WHERE id = $4 RETURNING *
+    `;
+
+    const result = await pool.query(query, [finalStatus, adminUsername, admin_comments || null, candidateId]);
 
     if (result.rowCount === 0) {
       return res.status(404).json({
@@ -282,6 +283,48 @@ exports.updateCandidateStatus = async (req, res, next) => {
     });
   } catch (error) {
     console.error('Error updating candidate status:', error);
+    next(error);
+  }
+};
+
+// Admin: Mark candidate as matched/married/engaged
+exports.markCandidateMatched = async (req, res, next) => {
+  try {
+    const { candidateId } = req.params;
+    const { matched_status, matched_partner_name, matched_partner_gender } = req.body;
+
+    if (!['Matched', 'Married', 'Engaged'].includes(matched_status)) {
+      return res.status(400).json({ success: false, message: 'Invalid matched status type' });
+    }
+
+    const query = `
+      UPDATE candidates 
+      SET is_matched = true, 
+          matched_status = $1, 
+          matched_partner_name = $2, 
+          matched_partner_gender = $3
+      WHERE id = $4
+      RETURNING *
+    `;
+
+    const result = await pool.query(query, [
+      matched_status,
+      matched_partner_name || null,
+      matched_partner_gender || null,
+      candidateId
+    ]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Candidate not found' });
+    }
+
+    res.json({
+      success: true,
+      message: `Candidate marked as ${matched_status.toLowerCase()}`,
+      candidate: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error marking candidate matched:', error);
     next(error);
   }
 };

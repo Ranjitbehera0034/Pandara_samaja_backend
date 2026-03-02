@@ -16,6 +16,7 @@ router.get('/stats', adminController.getDashboardStats);
 // Matrimony Admin
 router.get('/candidates', adminController.getAllCandidates);
 router.put('/candidates/:candidateId/status', adminController.updateCandidateStatus);
+router.put('/candidates/:candidateId/match', adminController.markCandidateMatched);
 router.delete('/candidates/:candidateId', adminController.deleteCandidate);
 
 // Member Admin
