@@ -86,9 +86,11 @@ exports.loginWithFirebase = async (req, res, next) => {
                 panchayat: member.panchayat,
                 village: member.village,
                 address: member.address,
+                head_gender: member.head_gender,
                 profile_photo_url: member.profile_photo_url,
                 // Mask Aadhaar for security
-                aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null
+                aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null,
+                family_members: member.family_members || []
             },
             loggedInUser: result.matchedUser
         });
@@ -136,9 +138,11 @@ exports.getProfile = async (req, res) => {
                 panchayat: member.panchayat,
                 village: member.village,
                 address: member.address,
+                head_gender: member.head_gender,
                 profile_photo_url: profilePhotoUrl,
                 // Mask Aadhaar for security
-                aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null
+                aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null,
+                family_members: member.family_members || []
             }
         });
     } catch (error) {
@@ -154,19 +158,56 @@ exports.getProfile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
     try {
         const membershipNo = req.portalMember.membership_no;
+        const relation = req.portalMember.relation?.toLowerCase() || '';
+        const isHead = relation === 'self/head' || relation === 'self' || relation === 'head';
 
-        // Only allow specific fields to be updated
-        const allowedFields = ['name', 'mobile', 'aadhar_no', 'address', 'district', 'taluka', 'panchayat', 'village', 'head_gender', 'male', 'female', 'family_members'];
-        const updateData = {};
-        for (const field of allowedFields) {
-            if (req.body[field] !== undefined) {
-                updateData[field] = req.body[field];
+        let updated;
+
+        if (isHead) {
+            // Head can update everything within allowed fields
+            const allowedFields = ['name', 'mobile', 'aadhar_no', 'address', 'district', 'taluka', 'panchayat', 'village', 'head_gender', 'male', 'female', 'family_members'];
+            const updateData = {};
+            for (const field of allowedFields) {
+                if (req.body[field] !== undefined) {
+                    updateData[field] = req.body[field];
+                }
             }
+            updated = await portal.updateMemberProfile(membershipNo, updateData);
+        } else {
+            // Family member can ONLY update their specific profile (name, gender) in family_members array.
+            // They CANNOT modify root properties, add/delete family members.
+            const existingMember = await portal.getMemberProfile(membershipNo);
+            if (!existingMember) {
+                return res.status(404).json({ success: false, message: 'Member not found' });
+            }
+
+            const cleanMobile = (req.portalMember.mobile || '').replace(/\D/g, '').slice(-10);
+            const familyMembers = existingMember.family_members || [];
+
+            let found = false;
+            const updatedFamily = familyMembers.map(fm => {
+                const fmMobile = (fm.mobile || '').replace(/\D/g, '').slice(-10);
+                if (fmMobile === cleanMobile) {
+                    found = true;
+                    // Only update personal fields, NEVER relationship or age or mobile without verification generally, but we'll allow name/gender for now.
+                    return {
+                        ...fm,
+                        name: req.body.name || fm.name,
+                        gender: req.body.head_gender || fm.gender // UI uses head_gender field for them
+                    };
+                }
+                return fm;
+            });
+
+            if (!found) {
+                return res.status(403).json({ success: false, message: 'Unauthorized to update profile' });
+            }
+
+            updated = await portal.updateMemberProfile(membershipNo, { family_members: updatedFamily });
         }
 
-        const updated = await portal.updateMemberProfile(membershipNo, updateData);
         if (!updated) {
-            return res.status(404).json({ success: false, message: 'Member not found' });
+            return res.status(404).json({ success: false, message: 'Update failed or member not found' });
         }
 
         res.json({
@@ -174,7 +215,7 @@ exports.updateProfile = async (req, res) => {
             message: 'Profile updated successfully',
             member: {
                 membership_no: updated.membership_no,
-                name: updated.name,
+                name: isHead ? updated.name : req.portalMember.name, // Return appropriate context name
                 mobile: updated.mobile,
                 district: updated.district,
                 taluka: updated.taluka,
@@ -183,7 +224,8 @@ exports.updateProfile = async (req, res) => {
                 address: updated.address,
                 profile_photo_url: updated.profile_photo_url,
                 // Mask Aadhaar for security
-                aadhar_no: updated.aadhar_no ? `********${updated.aadhar_no.slice(-4)}` : null
+                aadhar_no: updated.aadhar_no ? `********${updated.aadhar_no.slice(-4)}` : null,
+                family_members: updated.family_members || []
             }
         });
     } catch (error) {
