@@ -866,5 +866,177 @@ module.exports.getChatContacts = async (memberId, memberMobile) => {
     return res.rows;
 };
 
+/**
+ * Get Public Profile data (Name, Relation, Posts, Followers) efficiently
+ */
+exports.getPublicProfileData = async (membershipNo, name, viewerNo, viewerMobile) => {
+    const res = await pool.query(
+        `SELECT * FROM members WHERE membership_no = $1`,
+        [membershipNo]
+    );
+    const member = res.rows[0];
+    if (!member) return null;
 
+    let targetMobile = '';
+    let targetName = '';
+    let targetAvatar = null;
+    let targetGender = null;
+    let relation = '';
+    let isHoF = false;
 
+    const normReqName = (name || '').toLowerCase().trim();
+    const normMemName = (member.name || '').toLowerCase().trim();
+
+    if (!normReqName || normReqName === normMemName) {
+        isHoF = true;
+        targetMobile = member.mobile || '';
+        targetName = member.name;
+        targetAvatar = member.profile_photo_url;
+        targetGender = member.head_gender;
+        relation = 'Head of Family';
+    } else {
+        let foundFm = null;
+        if (Array.isArray(member.family_members)) {
+            foundFm = member.family_members.find(fm => (fm.name || '').toLowerCase().trim() === normReqName);
+        }
+        if (foundFm) {
+            targetMobile = foundFm.mobile || '';
+            targetName = foundFm.name;
+            targetAvatar = foundFm.profile_photo_url;
+            targetGender = foundFm.gender;
+            relation = foundFm.relation;
+        } else {
+            isHoF = true;
+            targetMobile = member.mobile || '';
+            targetName = member.name;
+            targetAvatar = member.profile_photo_url;
+            targetGender = member.head_gender;
+            relation = 'Head of Family';
+        }
+    }
+
+    const postsRes = await pool.query(
+        `SELECT p.*,
+            COALESCE(p.author_name, $4) AS author_name,
+            COALESCE(p.author_photo, $9) AS author_photo,
+            $5 AS author_village,
+            $6 AS author_district,
+            EXISTS(
+                SELECT 1 FROM portal_likes l
+                WHERE l.post_id = p.id AND l.member_id = $7 AND l.member_mobile = $8
+            ) AS liked_by_me,
+            (SELECT COUNT(*) FROM portal_comments c WHERE c.post_id = p.id) AS comments_count
+         FROM portal_posts p
+         WHERE p.author_id = $1 AND (p.author_mobile = $2 OR p.author_name = $3)
+         ORDER BY p.created_at DESC`,
+        [membershipNo, targetMobile, targetName, targetName, member.village, member.district, viewerNo || '', viewerMobile || '', targetAvatar || null]
+    );
+
+    const followerRes = await pool.query(
+        `SELECT COUNT(*) FROM portal_subscriptions WHERE following_id = $1 AND (following_mobile = $2 OR following_mobile = '')`,
+        [membershipNo, targetMobile]
+    );
+    const followingRes = await pool.query(
+        `SELECT COUNT(*) FROM portal_subscriptions WHERE follower_id = $1 AND (follower_mobile = $2 OR follower_mobile = '')`,
+        [membershipNo, targetMobile]
+    );
+
+    let isFollowing = false;
+    if (viewerNo && viewerMobile) {
+        const checkFollow = await pool.query(
+            `SELECT 1 FROM portal_subscriptions 
+             WHERE follower_id = $1 AND follower_mobile = $2 AND following_id = $3 AND (following_mobile = $4 OR following_mobile = '')`,
+            [viewerNo, viewerMobile, membershipNo, targetMobile]
+        );
+        isFollowing = checkFollow.rows.length > 0;
+    }
+
+    let familyList = [];
+    familyList.push({
+        id: member.membership_no,
+        name: member.name,
+        relation: 'Head of Family',
+        gender: member.head_gender,
+        avatar: member.profile_photo_url,
+        isHoF: true
+    });
+    if (Array.isArray(member.family_members)) {
+        member.family_members.forEach(fm => {
+            familyList.push({
+                id: member.membership_no,
+                name: fm.name,
+                relation: fm.relation,
+                gender: fm.gender,
+                avatar: fm.profile_photo_url,
+                isHoF: false
+            });
+        });
+    }
+
+    // Process posts formatting
+    const formattedPosts = await Promise.all(postsRes.rows.map(async p => {
+        let comments = [];
+        if (p.comments_count > 0) {
+            const comRes = await pool.query(
+                `SELECT c.*,
+                    COALESCE(c.author_name, 'Unknown') AS author_name,
+                    c.author_photo
+                 FROM portal_comments c
+                 WHERE c.post_id = $1
+                 ORDER BY c.created_at ASC`,
+                [p.id]
+            );
+            comments = comRes.rows.map(c => ({
+                id: c.id,
+                content: c.content,
+                authorName: c.author_name,
+                authorAvatar: c.author_photo,
+                timestamp: c.created_at,
+                likes: c.likes_count || 0
+            }));
+        }
+        return {
+            id: String(p.id),
+            authorId: p.author_id,
+            authorName: p.author_name,
+            authorAvatar: p.author_photo,
+            authorMobile: p.author_mobile,
+            location: p.location || p.author_village || p.author_district,
+            content: p.text_content || '',
+            media: (p.images || []).map(url => ({ url, type: url.match(/\.(mp4|webm|mov)$/i) ? 'video' : 'image' })),
+            likes: p.likes_count || 0,
+            reactions: p.reactions || { like: p.likes_count || 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
+            myReaction: p.liked_by_me ? 'like' : null,
+            comments: comments,
+            timestamp: p.created_at,
+            isLiked: p.liked_by_me,
+            poll: p.poll_data ? p.poll_data : undefined
+        };
+    }));
+
+    return {
+        id: membershipNo,
+        name: targetName,
+        avatar: targetAvatar,
+        gender: targetGender,
+        relation,
+        isHoF,
+        village: member.village,
+        district: member.district,
+        familyId: membershipNo,
+        hofName: member.name,
+        address: isHoF ? member.address : undefined,
+        maleCount: isHoF ? member.male : undefined,
+        femaleCount: isHoF ? member.female : undefined,
+        stats: {
+            posts: formattedPosts.length,
+            followers: parseInt(followerRes.rows[0].count),
+            following: parseInt(followingRes.rows[0].count),
+            familyMembers: familyList.length
+        },
+        family: familyList,
+        posts: formattedPosts,
+        isFollowing,
+        joined: new Date(member.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    };
+};

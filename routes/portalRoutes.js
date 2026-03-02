@@ -70,6 +70,7 @@ module.exports = (upload) => {
     // Members directory — no cache, results depend on search/filter query params
     router.get('/members/filters', requirePortalAuth, cache('30 minutes'), portalCtrl.getMemberFilterOptions);
     router.get('/members', requirePortalAuth, portalCtrl.getMembers);
+    router.get('/members/public/:id', requirePortalAuth, portalCtrl.getPublicProfile);
     router.get('/members/:id', requirePortalAuth, portalCtrl.getMemberById);
 
     // Notifications
