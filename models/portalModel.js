@@ -648,24 +648,124 @@ exports.deleteNotification = async (id, memberId, memberMobile) => {
 };
 
 /**
- * Get all members with subscription status for the current member (paginated)
+ * Get members with server-side search + filters + pagination.
+ * All filtering is done in SQL — safe for 6k+ rows.
  */
-exports.getMembersWithSubscription = async (currentMemberId, currentMemberMobile, page = 1, limit = 20) => {
+exports.getMembersWithSubscription = async (
+    currentMemberId, currentMemberMobile,
+    page = 1, limit = 30,
+    { search = '', district = '', village = '', gender = '' } = {}
+) => {
     const offset = (page - 1) * limit;
-    const res = await pool.query(
-        `SELECT m.membership_no, m.name, m.village, m.district, m.profile_photo_url,
-            EXISTS(
-                SELECT 1 FROM portal_subscriptions s
-              WHERE s.follower_id = $1 AND s.follower_mobile = $2 AND s.following_id = m.membership_no
-            ) AS is_subscribed
-     FROM members m
-     WHERE m.membership_no != $1
-     ORDER BY m.name
-     LIMIT $3 OFFSET $4`,
-        [currentMemberId, currentMemberMobile, limit, offset]
-    );
+    const params = [currentMemberId, currentMemberMobile];
+    const conditions = [
+        `m.membership_no != $1`,
+        `(m.is_banned IS NULL OR m.is_banned = false)`
+    ];
+
+    if (search) {
+        params.push(`%${search}%`);
+        const idx = params.length;
+        conditions.push(
+            `(m.name ILIKE $${idx} OR m.membership_no ILIKE $${idx} OR m.village ILIKE $${idx} OR m.mobile ILIKE $${idx})`
+        );
+    }
+    if (district) {
+        params.push(district);
+        conditions.push(`m.district = $${params.length}`);
+    }
+    if (village) {
+        params.push(village);
+        conditions.push(`m.village = $${params.length}`);
+    }
+    if (gender === 'female') {
+        conditions.push(`LOWER(m.head_gender) IN ('female', 'f')`);
+    } else if (gender === 'male') {
+        conditions.push(`LOWER(m.head_gender) NOT IN ('female', 'f')`);
+    }
+
+    const where = conditions.join(' AND ');
+    params.push(limit, offset);
+    const limitIdx = params.length - 1;
+    const offsetIdx = params.length;
+
+    const sql = `
+        SELECT m.membership_no, m.name, m.village, m.district, m.taluka, m.panchayat,
+               m.mobile, m.head_gender, m.male, m.female,
+               m.family_members, m.profile_photo_url,
+               m.address, m.last_portal_login,
+               EXISTS(
+                   SELECT 1 FROM portal_subscriptions s
+                   WHERE s.follower_id = $1 AND s.follower_mobile = $2 AND s.following_id = m.membership_no
+               ) AS is_subscribed
+        FROM members m
+        WHERE ${where}
+        ORDER BY m.name
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
+
+    const res = await pool.query(sql, params);
     return res.rows;
 };
+
+/**
+ * Get total count matching filters (for pagination display)
+ */
+exports.getMembersCount = async (
+    currentMemberId,
+    { search = '', district = '', village = '', gender = '' } = {}
+) => {
+    const params = [currentMemberId];
+    const conditions = [
+        `m.membership_no != $1`,
+        `(m.is_banned IS NULL OR m.is_banned = false)`
+    ];
+
+    if (search) {
+        params.push(`%${search}%`);
+        const idx = params.length;
+        conditions.push(
+            `(m.name ILIKE $${idx} OR m.membership_no ILIKE $${idx} OR m.village ILIKE $${idx} OR m.mobile ILIKE $${idx})`
+        );
+    }
+    if (district) {
+        params.push(district);
+        conditions.push(`m.district = $${params.length}`);
+    }
+    if (village) {
+        params.push(village);
+        conditions.push(`m.village = $${params.length}`);
+    }
+    if (gender === 'female') {
+        conditions.push(`LOWER(m.head_gender) IN ('female', 'f')`);
+    } else if (gender === 'male') {
+        conditions.push(`LOWER(m.head_gender) NOT IN ('female', 'f')`);
+    }
+
+    const where = conditions.join(' AND ');
+    const res = await pool.query(
+        `SELECT COUNT(*) AS total FROM members m WHERE ${where}`,
+        params
+    );
+    return parseInt(res.rows[0].total, 10);
+};
+
+/**
+ * Get distinct districts (and optionally villages for a district) for filter dropdowns
+ */
+exports.getMemberFilterOptions = async () => {
+    const res = await pool.query(
+        `SELECT DISTINCT district, village FROM members
+         WHERE district IS NOT NULL AND district != ''
+         ORDER BY district, village`
+    );
+    const districtMap = {};
+    for (const row of res.rows) {
+        if (!districtMap[row.district]) districtMap[row.district] = [];
+        if (row.village) districtMap[row.district].push(row.village);
+    }
+    return districtMap;
+};
+
 
 
 // ═══════════════════════════════════════════════════
