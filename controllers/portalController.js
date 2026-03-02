@@ -923,6 +923,30 @@ exports.getMemberById = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/portal/members/public/:id
+ * Get a public, read-only profile by ID and Name
+ */
+exports.getPublicProfile = async (req, res) => {
+    try {
+        const membershipNo = req.params.id;
+        const name = req.query.name;
+
+        // Viewer can be undefined if not logged in, but our route will probably be authenticated
+        const viewerNo = req.portalMember ? req.portalMember.membership_no : null;
+        const viewerMobile = req.portalMember ? req.portalMember.mobile : null;
+
+        const profileData = await portal.getPublicProfileData(membershipNo, name, viewerNo, viewerMobile);
+        if (!profileData) {
+            return res.status(404).json({ success: false, message: 'Profile not found' });
+        }
+        res.json({ success: true, profile: profileData });
+    } catch (error) {
+        console.error('Get public profile error:', error);
+        res.status(500).json({ success: false, message: 'Failed to load public profile' });
+    }
+};
+
 
 // ═══════════════════════════════════════════════════
 //  NOTIFICATIONS
