@@ -67,9 +67,9 @@ module.exports = (upload) => {
     router.post('/subscribe/:memberId{/:mobile}', requirePortalAuth, portalCtrl.toggleSubscription);
     router.get('/subscriptions', requirePortalAuth, portalCtrl.getSubscriptions);
 
-    // Members directory
-    // Cache the member directory for 5 minutes (invalidates on member changes usually, but this is a broad cache)
-    router.get('/members', requirePortalAuth, cache('5 minutes'), portalCtrl.getMembers);
+    // Members directory — no cache, results depend on search/filter query params
+    router.get('/members/filters', requirePortalAuth, cache('30 minutes'), portalCtrl.getMemberFilterOptions);
+    router.get('/members', requirePortalAuth, portalCtrl.getMembers);
     router.get('/members/:id', requirePortalAuth, portalCtrl.getMemberById);
 
     // Notifications

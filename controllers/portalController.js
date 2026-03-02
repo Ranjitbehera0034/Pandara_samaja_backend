@@ -857,21 +857,54 @@ exports.getSubscriptions = async (req, res) => {
  */
 exports.getMembers = async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 30), 100);
+        const filters = {
+            search: (req.query.search || '').trim(),
+            district: (req.query.district || '').trim(),
+            village: (req.query.village || '').trim(),
+            gender: (req.query.gender || '').trim(),
+        };
 
-        const members = await portal.getMembersWithSubscription(
-            req.portalMember.membership_no,
-            req.portalMember.mobile,
+        const [members, total] = await Promise.all([
+            portal.getMembersWithSubscription(
+                req.portalMember.membership_no,
+                req.portalMember.mobile,
+                page, limit, filters
+            ),
+            portal.getMembersCount(req.portalMember.membership_no, filters),
+        ]);
+
+        const totalPages = Math.ceil(total / limit);
+        res.json({
+            success: true,
+            members,
             page,
-            limit
-        );
-        res.json({ success: true, members, page, limit });
+            limit,
+            total,
+            totalPages,
+            hasMore: page < totalPages,
+        });
     } catch (error) {
         console.error('Get portal members error:', error);
         res.status(500).json({ success: false, message: 'Failed to load members' });
     }
 };
+
+/**
+ * GET /api/portal/members/filters
+ * Returns distinct districts and their villages for filter dropdowns
+ */
+exports.getMemberFilterOptions = async (req, res) => {
+    try {
+        const districtMap = await portal.getMemberFilterOptions();
+        res.json({ success: true, districts: districtMap });
+    } catch (error) {
+        console.error('Filter options error:', error);
+        res.status(500).json({ success: false, message: 'Failed to load filter options' });
+    }
+};
+
 
 /**
  * GET /api/portal/members/:id
