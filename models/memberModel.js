@@ -62,12 +62,14 @@ exports.create = async (data) => {
     data.village ?? null,
     encrypt(data.aadhar_no) ?? null,
     JSON.stringify(familyMembers),
-    data.address ?? null
+    data.address ?? null,
+    data.state ?? null,
+    data.profile_photo_url ?? null
   ];
 
   const query = `
-    INSERT INTO members (membership_no, name, head_gender, mobile, male, female, district, taluka, panchayat, village, aadhar_no, family_members, address)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13)
+    INSERT INTO members (membership_no, name, head_gender, mobile, male, female, district, taluka, panchayat, village, aadhar_no, family_members, address, state, profile_photo_url)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15)
     RETURNING *`;
 
   const res = await pool.query(query, params);
@@ -156,6 +158,8 @@ exports.update = async (id, data) => {
     encrypt(merged.aadhar_no) ?? null,
     JSON.stringify(familyMembers),
     merged.address ?? null,
+    merged.state ?? null,
+    merged.profile_photo_url ?? null,
     id
   ];
 
@@ -163,8 +167,8 @@ exports.update = async (id, data) => {
   const query = `
     UPDATE members 
     SET name=$1, head_gender=$2, mobile=$3, male=$4, female=$5, district=$6, taluka=$7, panchayat=$8, village=$9,
-        aadhar_no=$10, family_members=$11::jsonb, address=$12
-    WHERE membership_no=$13 RETURNING *`;
+        aadhar_no=$10, family_members=$11::jsonb, address=$12, state=$13, profile_photo_url=$14
+    WHERE membership_no=$15 RETURNING *`;
 
   const res = await pool.query(query, params);
   return res.rows[0];
@@ -256,7 +260,9 @@ exports.bulkUpsertMembers = async (rows) => {
       r.village,
       encrypt(r.aadhar_no?.toString()) ?? null,
       JSON.stringify(fm),
-      r.address ?? null
+      r.address ?? null,
+      r.state ?? null,
+      r.profile_photo_url ?? null
     ];
   });
 
@@ -268,7 +274,7 @@ exports.bulkUpsertMembers = async (rows) => {
       INSERT INTO public.members
         (membership_no, name, head_gender, mobile, male, female,
          district, taluka, panchayat, village,
-         aadhar_no, family_members, address)
+         aadhar_no, family_members, address, state, profile_photo_url)
       VALUES %L
       ON CONFLICT ON CONSTRAINT members_membership_no_key DO UPDATE
         SET name           = EXCLUDED.name,
@@ -282,7 +288,9 @@ exports.bulkUpsertMembers = async (rows) => {
             village        = EXCLUDED.village,
             aadhar_no      = EXCLUDED.aadhar_no,
             family_members = EXCLUDED.family_members::jsonb,
-            address        = EXCLUDED.address;
+            address        = EXCLUDED.address,
+            state          = EXCLUDED.state,
+            profile_photo_url = EXCLUDED.profile_photo_url;
     `, vals);
 
     await client.query(sql);

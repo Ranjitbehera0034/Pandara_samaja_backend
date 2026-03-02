@@ -56,7 +56,7 @@ exports.getAll = async (req, res) => {
   // Check if search query parameter exists
   if (req.query.search) {
     const data = await model.search(req.query.search, limit, offset);
-    const rows = maskRows(data.rows, req.user?.role === 'admin');
+    const rows = maskRows(data.rows, ['admin', 'super_admin'].includes(req.user?.role));
     // Count for search is complex; for now just returning the masked rows
     return res.json({
       success: true,
@@ -67,7 +67,7 @@ exports.getAll = async (req, res) => {
 
   const data = await model.getAll(limit, offset);
   const totalItems = await model.getTotalCount();
-  const rows = maskRows(data.rows, req.user?.role === 'admin');
+  const rows = maskRows(data.rows, ['admin', 'super_admin'].includes(req.user?.role));
 
   res.json({
     success: true,
@@ -88,14 +88,14 @@ exports.getByLocation = async (req, res) => {
     panchayat
   } = req.query;
   const data = await model.getAllByLocation(district, taluka, panchayat);
-  res.json(maskRows(data.rows, req.user?.role === 'admin'));
+  res.json(maskRows(data.rows, ['admin', 'super_admin'].includes(req.user?.role)));
 };
 exports.search = async (req, res) => {
   const {
     keyword
   } = req.query;
   const data = await model.search(keyword);
-  res.json(maskRows(data.rows, req.user?.role === 'admin'));
+  res.json(maskRows(data.rows, ['admin', 'super_admin'].includes(req.user?.role)));
 };
 exports.getOne = async (req, res, next) => {
   try {
@@ -107,7 +107,7 @@ exports.getOne = async (req, res, next) => {
     }
 
     // Mask if not admin
-    if (req.user?.role !== 'admin') {
+    if (!['admin', 'super_admin'].includes(req.user?.role)) {
       member.mobile = maskMobile(member.mobile);
       member.aadhar_no = maskAadhar(member.aadhar_no);
     }
@@ -228,7 +228,9 @@ exports.importRows = async (req, res, next) => {
         village: (r.village ?? '').toString().trim(),
         aadhar_no: (r.aadhar_no ?? '').toString().trim() || null,
         family_members: r.family_members ?? [],
-        address: (r.address ?? '').toString().trim() || null
+        address: (r.address ?? '').toString().trim() || null,
+        state: (r.state ?? '').toString().trim() || null,
+        profile_photo_url: (r.profile_photo_url ?? '').toString().trim() || null
       };
 
       // Mandatory fields

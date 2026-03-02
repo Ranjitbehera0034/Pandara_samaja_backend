@@ -14,8 +14,8 @@ const router = express.Router();
 
 // Public routes (with optional auth for admin check)
 // Cache standard searches and directory scans to relieve database pressure
-router.get('/search', optionalAuth, cache('1 minute'), memberController.search);
-router.get('/', optionalAuth, cache('1 minute'), memberController.getAll);
+router.get('/search', optionalAuth, memberController.search);
+router.get('/', optionalAuth, memberController.getAll);
 
 // Export endpoint — admin only (contains raw Aadhaar + mobile data)
 router.get('/export', requireAuthAdmin, memberController.exportExcel);
