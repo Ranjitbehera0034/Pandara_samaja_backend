@@ -556,7 +556,7 @@ exports.toggleLike = async (req, res) => {
  */
 exports.addComment = async (req, res) => {
     try {
-        const { text } = req.body;
+        const { text, parentId } = req.body;
         if (!text || !text.trim()) {
             return res.status(400).json({
                 success: false,
@@ -594,7 +594,8 @@ exports.addComment = async (req, res) => {
             text.trim(),
             member.name,
             authorPhoto,
-            member.mobile
+            member.mobile,
+            parentId || null
         );
 
         // Notify connected clients
@@ -643,11 +644,43 @@ exports.addComment = async (req, res) => {
  */
 exports.getComments = async (req, res) => {
     try {
-        const comments = await portal.getComments(req.params.id);
+        const comments = await portal.getComments(req.params.id, req.portalMember.membership_no, req.portalMember.mobile);
         res.json({ success: true, comments });
     } catch (error) {
         console.error('Get comments error:', error);
         res.status(500).json({ success: false, message: 'Failed to load comments' });
+    }
+};
+
+/**
+ * POST /api/portal/comments/:id/like
+ * Toggle like on a comment
+ */
+exports.toggleLikeComment = async (req, res) => {
+    try {
+        const result = await portal.toggleLikeComment(
+            req.params.id,
+            req.portalMember.membership_no,
+            req.portalMember.mobile
+        );
+
+        // Emit socket event
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('comment_like_updated', {
+                commentId: req.params.id,
+                likes: result.likes_count
+            });
+        }
+
+        res.json({
+            success: true,
+            liked: result.liked,
+            likes_count: result.likes_count
+        });
+    } catch (error) {
+        console.error('Toggle comment like error:', error);
+        res.status(500).json({ success: false, message: 'Failed to toggle comment like' });
     }
 };
 

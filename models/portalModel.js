@@ -188,8 +188,14 @@ exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null, mobile = 
     const offset = (page - 1) * limit;
     const res = await pool.query(
         `SELECT p.*,
-            COALESCE(p.author_name, m.name) AS author_name,
-            COALESCE(p.author_photo, m.profile_photo_url) AS author_photo,
+            COALESCE(
+              (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = p.author_mobile),
+              m.name
+            ) AS author_name,
+            COALESCE(
+              (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = p.author_mobile),
+              m.profile_photo_url
+            ) AS author_photo,
             m.village AS author_village,
             m.district AS author_district,
             EXISTS(
@@ -211,8 +217,14 @@ exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null, mobile = 
 exports.getPost = async (postId, membershipNo, mobile) => {
     const res = await pool.query(
         `SELECT p.*,
-            COALESCE(p.author_name, m.name) AS author_name,
-            COALESCE(p.author_photo, m.profile_photo_url) AS author_photo,
+            COALESCE(
+              (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = p.author_mobile),
+              m.name
+            ) AS author_name,
+            COALESCE(
+              (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = p.author_mobile),
+              m.profile_photo_url
+            ) AS author_photo,
             m.village AS author_village,
             m.district AS author_district,
             EXISTS(
@@ -358,16 +370,16 @@ exports.toggleLike = async (postId, memberId, memberMobile) => {
 /**
  * Add a comment to a post
  */
-exports.addComment = async (postId, memberId, text, commenterName, commenterPhoto, commenterMobile) => {
+exports.addComment = async (postId, memberId, text, commenterName, commenterPhoto, commenterMobile, parentId = null) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
         const res = await client.query(
-            `INSERT INTO portal_comments (post_id, member_id, text, author_name, author_photo, author_mobile)
-       VALUES ($1, $2, $3, $4, $5, $6)
+            `INSERT INTO portal_comments (post_id, member_id, text, author_name, author_photo, author_mobile, parent_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-            [postId, memberId, text, commenterName || null, commenterPhoto || null, commenterMobile || null]
+            [postId, memberId, text, commenterName || null, commenterPhoto || null, commenterMobile || null, parentId]
         );
 
         await client.query(
@@ -380,8 +392,14 @@ exports.addComment = async (postId, memberId, text, commenterName, commenterPhot
         // Fetch with author name
         const commentWithAuthor = await client.query(
             `SELECT c.*, 
-                COALESCE(c.author_name, m.name) AS author_name,
-                COALESCE(c.author_photo, m.profile_photo_url) AS author_photo
+                COALESCE(
+                  (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = c.author_mobile),
+                  m.name
+                ) AS author_name,
+                COALESCE(
+                  (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = c.author_mobile),
+                  m.profile_photo_url
+                ) AS author_photo
        FROM portal_comments c
        JOIN members m ON m.membership_no = c.member_id
        WHERE c.id = $1`,
@@ -412,18 +430,81 @@ exports.addComment = async (postId, memberId, text, commenterName, commenterPhot
 };
 
 /**
+ * Toggle like for a comment
+ */
+exports.toggleLikeComment = async (commentId, memberId, memberMobile) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Check if already liked
+        const check = await client.query(
+            'SELECT id FROM portal_comment_likes WHERE comment_id = $1 AND member_id = $2 AND member_mobile = $3',
+            [commentId, memberId, memberMobile]
+        );
+
+        let liked = true;
+
+        if (check.rows.length > 0) {
+            // Unlike
+            await client.query(
+                'DELETE FROM portal_comment_likes WHERE comment_id = $1 AND member_id = $2 AND member_mobile = $3',
+                [commentId, memberId, memberMobile]
+            );
+            await client.query(
+                'UPDATE portal_comments SET likes_count = GREATEST(0, likes_count - 1) WHERE id = $1',
+                [commentId]
+            );
+            liked = false;
+        } else {
+            // Like
+            await client.query(
+                'INSERT INTO portal_comment_likes (comment_id, member_id, member_mobile) VALUES ($1, $2, $3)',
+                [commentId, memberId, memberMobile]
+            );
+            await client.query(
+                'UPDATE portal_comments SET likes_count = likes_count + 1 WHERE id = $1',
+                [commentId]
+            );
+            liked = true;
+        }
+
+        const stats = await client.query('SELECT likes_count FROM portal_comments WHERE id = $1', [commentId]);
+
+        await client.query('COMMIT');
+
+        return { liked, likes_count: parseInt(stats.rows[0].likes_count) };
+    } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+    } finally {
+        client.release();
+    }
+};
+
+/**
  * Get comments for a post
  */
-exports.getComments = async (postId) => {
+exports.getComments = async (postId, memberId, memberMobile) => {
     const res = await pool.query(
         `SELECT c.*,
-            COALESCE(c.author_name, m.name) AS author_name,
-            COALESCE(c.author_photo, m.profile_photo_url) AS author_photo
+            COALESCE(
+              (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = c.author_mobile),
+              m.name
+            ) AS author_name,
+            COALESCE(
+              (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = c.author_mobile),
+              m.profile_photo_url
+            ) AS author_photo,
+            EXISTS(
+              SELECT 1 FROM portal_comment_likes l
+              WHERE l.comment_id = c.id AND l.member_id = $2 AND l.member_mobile = $3
+            ) AS liked_by_me
      FROM portal_comments c
      JOIN members m ON m.membership_no = c.member_id
      WHERE c.post_id = $1
      ORDER BY c.created_at ASC`,
-        [postId]
+        [postId, memberId || '', memberMobile || '']
     );
     return res.rows;
 };

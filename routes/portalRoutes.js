@@ -56,6 +56,7 @@ module.exports = (upload) => {
     router.get('/posts/:id/comments', requirePortalAuth, portalCtrl.getComments);
     router.post('/posts/:id/comments', requirePortalAuth, portalCtrl.addComment);
     router.delete('/comments/:id', requirePortalAuth, portalCtrl.deleteComment);
+    router.post('/comments/:id/like', requirePortalAuth, portalCtrl.toggleLikeComment);
 
     // Photo Gallery
     router.get('/photos', requirePortalAuth, portalCtrl.getMyPhotos);
