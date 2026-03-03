@@ -202,7 +202,8 @@ exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null, mobile = 
             EXISTS(
               SELECT 1 FROM portal_likes l
               WHERE l.post_id = p.id AND l.member_id = $3 AND l.member_mobile = $4
-            ) AS liked_by_me
+            ) AS liked_by_me,
+            (SELECT COUNT(*) FROM portal_comments c WHERE c.post_id = p.id) AS comments_count
      FROM portal_posts p
      JOIN members m ON m.membership_no = p.author_id
      ORDER BY p.created_at DESC
@@ -232,7 +233,8 @@ exports.getPost = async (postId, membershipNo, mobile) => {
             EXISTS(
               SELECT 1 FROM portal_likes l
               WHERE l.post_id = p.id AND l.member_id = $2 AND l.member_mobile = $3
-            ) AS liked_by_me
+            ) AS liked_by_me,
+            (SELECT COUNT(*) FROM portal_comments c WHERE c.post_id = p.id) AS comments_count
      FROM portal_posts p
      JOIN members m ON m.membership_no = p.author_id
      WHERE p.id = $1`,
@@ -486,9 +488,16 @@ exports.toggleLikeComment = async (commentId, memberId, memberMobile) => {
 };
 
 /**
- * Get comments for a post
+ * Get comments for a post based on parent_id and pagination
  */
-exports.getComments = async (postId, memberId, memberMobile) => {
+exports.getComments = async (postId, memberId, memberMobile, parentId = null, page = 1, limit = 5) => {
+    const offset = (page - 1) * limit;
+
+    // We check if parentId is null or a true id string
+    const parentCondition = parentId ? `c.parent_id = $4` : `c.parent_id IS NULL`;
+    const params = [postId, memberId || '', memberMobile || ''];
+    if (parentId) params.push(parentId);
+
     const res = await pool.query(
         `SELECT c.*,
             COALESCE(
@@ -503,14 +512,28 @@ exports.getComments = async (postId, memberId, memberMobile) => {
             EXISTS(
               SELECT 1 FROM portal_comment_likes l
               WHERE l.comment_id = c.id AND l.member_id = $2 AND l.member_mobile = $3
-            ) AS liked_by_me
+            ) AS liked_by_me,
+            (SELECT COUNT(*) FROM portal_comments r WHERE r.parent_id = c.id) AS replies_count
      FROM portal_comments c
      JOIN members m ON m.membership_no = c.member_id
-     WHERE c.post_id = $1
-     ORDER BY c.created_at ASC`,
-        [postId, memberId || '', memberMobile || '']
+     WHERE c.post_id = $1 AND ${parentCondition}
+     ORDER BY c.created_at DESC
+     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, limit, offset]
     );
-    return res.rows;
+
+    // Also get total count for this level to power the "View More" button
+    const countRes = await pool.query(
+        `SELECT COUNT(*) as total FROM portal_comments c WHERE c.post_id = $1 AND ${parentCondition}`,
+        params
+    );
+
+    return {
+        comments: res.rows,
+        total: parseInt(countRes.rows[0].total, 10),
+        page,
+        limit
+    };
 };
 
 /**
@@ -739,7 +762,7 @@ exports.deleteNotification = async (id, memberId, memberMobile) => {
 exports.getMembersWithSubscription = async (
     currentMemberId, currentMemberMobile,
     page = 1, limit = 30,
-    { search = '', district = '', village = '', gender = '' } = {}
+    { search = '', district = '', village = '', gender = '', hasMobile = false } = {}
 ) => {
     const offset = (page - 1) * limit;
     const params = [currentMemberId, currentMemberMobile];
@@ -747,6 +770,14 @@ exports.getMembersWithSubscription = async (
         `m.membership_no != $1`,
         `(m.is_banned IS NULL OR m.is_banned = false)`
     ];
+
+    if (hasMobile) {
+        conditions.push(`COALESCE(TRIM(m.mobile), '') != ''`);
+    }
+
+    if (hasMobile) {
+        conditions.push(`COALESCE(TRIM(m.mobile), '') != ''`);
+    }
 
     if (search) {
         params.push(`%${search}%`);
@@ -797,13 +828,21 @@ exports.getMembersWithSubscription = async (
  */
 exports.getMembersCount = async (
     currentMemberId,
-    { search = '', district = '', village = '', gender = '' } = {}
+    { search = '', district = '', village = '', gender = '', hasMobile = false } = {}
 ) => {
     const params = [currentMemberId];
     const conditions = [
         `m.membership_no != $1`,
         `(m.is_banned IS NULL OR m.is_banned = false)`
     ];
+
+    if (hasMobile) {
+        conditions.push(`COALESCE(TRIM(m.mobile), '') != ''`);
+    }
+
+    if (hasMobile) {
+        conditions.push(`COALESCE(TRIM(m.mobile), '') != ''`);
+    }
 
     if (search) {
         params.push(`%${search}%`);

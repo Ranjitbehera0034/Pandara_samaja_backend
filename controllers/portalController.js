@@ -646,11 +646,22 @@ exports.addComment = async (req, res) => {
  */
 exports.getComments = async (req, res) => {
     try {
-        const comments = await portal.getComments(req.params.id, req.portalMember.membership_no, req.portalMember.mobile);
-        res.json({ success: true, comments });
+        const parentId = req.query.parentId || null;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 5;
+
+        const result = await portal.getComments(
+            req.params.id,
+            req.portalMember.membership_no,
+            req.portalMember.mobile,
+            parentId,
+            page,
+            limit
+        );
+        res.json({ success: true, comments: result.comments, total: result.total, page, limit });
     } catch (error) {
         console.error('Get comments error:', error);
-        res.status(500).json({ success: false, message: 'Failed to load comments' });
+        res.status(500).json({ success: false, message: 'Failed to fetch comments' });
     }
 };
 
@@ -899,6 +910,7 @@ exports.getMembers = async (req, res) => {
             district: (req.query.district || '').trim(),
             village: (req.query.village || '').trim(),
             gender: (req.query.gender || '').trim(),
+            hasMobile: req.query.hasMobile === 'true',
         };
 
         const [members, total] = await Promise.all([
