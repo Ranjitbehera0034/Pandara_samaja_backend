@@ -601,8 +601,8 @@ module.exports.createNotification = async (recipientId, type, actorId, message, 
 exports.getNotifications = async (memberId, memberMobile) => {
     const res = await pool.query(
         `SELECT n.id, n.type, COALESCE(n.actor_name, m.name) AS "actorName", 
-            COALESCE(n.actor_avatar, 
-                (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(m.family_members) f WHERE (f->>'mobile')::text = n.actor_mobile),
+            COALESCE(
+                (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = n.actor_mobile),
                 m.profile_photo_url
             ) AS "actorAvatar",
             n.message, n.created_at AS timestamp, n.is_read AS read, n.post_id AS "postId"
