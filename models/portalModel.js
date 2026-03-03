@@ -523,10 +523,13 @@ exports.getComments = async (postId, memberId, memberMobile, parentId = null, pa
     );
 
     // Also get total count for this level to power the "View More" button
-    const countRes = await pool.query(
-        `SELECT COUNT(*) as total FROM portal_comments c WHERE c.post_id = $1 AND ${parentCondition}`,
-        params
-    );
+    const countQuery = parentId
+        ? `SELECT COUNT(*) as total FROM portal_comments c WHERE c.post_id = $1 AND c.parent_id = $2`
+        : `SELECT COUNT(*) as total FROM portal_comments c WHERE c.post_id = $1 AND c.parent_id IS NULL`;
+
+    const countParams = parentId ? [postId, parentId] : [postId];
+
+    const countRes = await pool.query(countQuery, countParams);
 
     return {
         comments: res.rows,
