@@ -2,31 +2,9 @@ const model = require('../models/memberModel');
 const ExcelJS = require('exceljs');
 const fs = require('node:fs/promises');
 
-// Helper to mask mobile number (show last 4 digits only)
-const maskMobile = mobile => {
-  if (!mobile) return mobile;
-  const s = mobile.toString();
-  // If undefined/null/empty handled above. If too short, mask all.
-  if (s.length <= 4) return '******';
-  return '******' + s.slice(-4);
-};
-
-// Helper to mask Aadhaar number (show last 4 digits only)
-const maskAadhar = aadhar => {
-  if (!aadhar) return aadhar;
-  const s = aadhar.toString();
-  if (s.length <= 4) return '********';
-  return '********' + s.slice(-4);
-};
-
-// Helper: mask result rows
+// Helper: mask result rows (disabled as per user request to show full data)
 const maskRows = (rows, isAdmin) => {
-  if (isAdmin) return rows;
-  return rows.map(r => ({
-    ...r,
-    mobile: maskMobile(r.mobile),
-    aadhar_no: maskAadhar(r.aadhar_no)
-  }));
+  return rows;
 };
 
 /**
@@ -106,11 +84,11 @@ exports.getOne = async (req, res, next) => {
       });
     }
 
-    // Mask if not admin
-    if (!['admin', 'super_admin'].includes(req.user?.role)) {
-      member.mobile = maskMobile(member.mobile);
-      member.aadhar_no = maskAadhar(member.aadhar_no);
-    }
+    // Masking removed so users can see full details
+    // if (!['admin', 'super_admin'].includes(req.user?.role)) {
+    //   member.mobile = member.mobile;
+    //   member.aadhar_no = member.aadhar_no;
+    // }
     res.json(member);
   } catch (error) {
     next(error);

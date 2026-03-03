@@ -170,7 +170,7 @@ exports.getAllApplications = async ({ status = null, page = 1, limit = 50 } = {}
         `SELECT a.*,
                 m.name AS hof_name,
                 m.village, m.district, m.taluka, m.panchayat,
-                m.father_name, m.mobile AS hof_mobile,
+                m.mobile AS hof_mobile,
                 m.profile_photo_url,
                 m.family_members
          FROM matrimony_applications a
@@ -197,7 +197,7 @@ exports.getApplicationById = async (id) => {
         `SELECT a.*,
                 m.name AS hof_name,
                 m.village, m.district, m.taluka, m.panchayat,
-                m.father_name, m.mother_name, m.mobile AS hof_mobile,
+                m.mobile AS hof_mobile,
                 m.profile_photo_url,
                 m.family_members,
                 m.address, m.head_gender, m.male, m.female
