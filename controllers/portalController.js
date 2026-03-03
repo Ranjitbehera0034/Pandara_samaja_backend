@@ -87,7 +87,7 @@ exports.loginWithFirebase = async (req, res, next) => {
                 village: member.village,
                 address: member.address,
                 head_gender: member.head_gender,
-                profile_photo_url: member.profile_photo_url,
+                profile_photo_url: member.profile_photo_url ? member.profile_photo_url.replace('drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') : null,
                 // Mask Aadhaar for security
                 aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null,
                 family_members: member.family_members || []
@@ -139,7 +139,7 @@ exports.getProfile = async (req, res) => {
                 village: member.village,
                 address: member.address,
                 head_gender: member.head_gender,
-                profile_photo_url: profilePhotoUrl,
+                profile_photo_url: profilePhotoUrl ? profilePhotoUrl.replace('drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') : null,
                 // Mask Aadhaar for security
                 aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null,
                 family_members: member.family_members || []
@@ -222,7 +222,7 @@ exports.updateProfile = async (req, res) => {
                 panchayat: updated.panchayat,
                 village: updated.village,
                 address: updated.address,
-                profile_photo_url: updated.profile_photo_url,
+                profile_photo_url: updated.profile_photo_url ? updated.profile_photo_url.replace('drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') : null,
                 // Mask Aadhaar for security
                 aadhar_no: updated.aadhar_no ? `********${updated.aadhar_no.slice(-4)}` : null,
                 family_members: updated.family_members || []
@@ -255,11 +255,13 @@ exports.uploadProfilePhoto = async (req, res) => {
         // Also save to gallery (associated with membership_no)
         await portal.addPhoto(req.portalMember.membership_no, url, `Profile Photo - ${req.portalMember.name}`);
 
+        const cleanedUrl = url ? url.replace('drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') : url;
+
         res.json({
             success: true,
             message: 'Profile photo uploaded',
-            url,
-            photoUrl: url  // Frontend Profile.tsx expects data.photoUrl
+            url: cleanedUrl,
+            photoUrl: cleanedUrl  // Frontend Profile.tsx expects data.photoUrl
         });
     } catch (error) {
         console.error('Upload profile photo error:', error);
@@ -644,11 +646,22 @@ exports.addComment = async (req, res) => {
  */
 exports.getComments = async (req, res) => {
     try {
-        const comments = await portal.getComments(req.params.id, req.portalMember.membership_no, req.portalMember.mobile);
-        res.json({ success: true, comments });
+        const parentId = req.query.parentId || null;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 5;
+
+        const result = await portal.getComments(
+            req.params.id,
+            req.portalMember.membership_no,
+            req.portalMember.mobile,
+            parentId,
+            page,
+            limit
+        );
+        res.json({ success: true, comments: result.comments, total: result.total, page, limit });
     } catch (error) {
         console.error('Get comments error:', error);
-        res.status(500).json({ success: false, message: 'Failed to load comments' });
+        res.status(500).json({ success: false, message: 'Failed to fetch comments' });
     }
 };
 
@@ -897,6 +910,7 @@ exports.getMembers = async (req, res) => {
             district: (req.query.district || '').trim(),
             village: (req.query.village || '').trim(),
             gender: (req.query.gender || '').trim(),
+            hasMobile: req.query.hasMobile === 'true',
         };
 
         const [members, total] = await Promise.all([
