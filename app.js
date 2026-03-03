@@ -48,7 +48,9 @@ app.use(
 /* ─── 2b. Security Middleware (Helmet + Rate Limiting) ────── */
 const helmet = require('helmet');
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false,
+  xFrameOptions: false
 }));
 
 const rateLimit = require('express-rate-limit');
