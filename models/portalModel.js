@@ -189,13 +189,14 @@ exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null, mobile = 
     const res = await pool.query(
         `SELECT p.*,
             COALESCE(
-              (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = p.author_mobile),
+              (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = p.author_name LIMIT 1),
+              p.author_name,
               m.name
             ) AS author_name,
-            COALESCE(
-              (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = p.author_mobile),
+            REPLACE(COALESCE(
+              (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = p.author_name LIMIT 1),
               m.profile_photo_url
-            ) AS author_photo,
+            ), 'drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') AS author_photo,
             m.village AS author_village,
             m.district AS author_district,
             EXISTS(
@@ -218,13 +219,14 @@ exports.getPost = async (postId, membershipNo, mobile) => {
     const res = await pool.query(
         `SELECT p.*,
             COALESCE(
-              (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = p.author_mobile),
+              (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = p.author_name LIMIT 1),
+              p.author_name,
               m.name
             ) AS author_name,
-            COALESCE(
-              (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = p.author_mobile),
+            REPLACE(COALESCE(
+              (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = p.author_name LIMIT 1),
               m.profile_photo_url
-            ) AS author_photo,
+            ), 'drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') AS author_photo,
             m.village AS author_village,
             m.district AS author_district,
             EXISTS(
@@ -393,13 +395,14 @@ exports.addComment = async (postId, memberId, text, commenterName, commenterPhot
         const commentWithAuthor = await client.query(
             `SELECT c.*, 
                 COALESCE(
-                  (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = c.author_mobile),
+                  (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = c.author_name LIMIT 1),
+                  c.author_name,
                   m.name
                 ) AS author_name,
-                COALESCE(
-                  (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = c.author_mobile),
+                REPLACE(COALESCE(
+                  (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = c.author_name LIMIT 1),
                   m.profile_photo_url
-                ) AS author_photo
+                ), 'drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') AS author_photo
        FROM portal_comments c
        JOIN members m ON m.membership_no = c.member_id
        WHERE c.id = $1`,
@@ -489,13 +492,14 @@ exports.getComments = async (postId, memberId, memberMobile) => {
     const res = await pool.query(
         `SELECT c.*,
             COALESCE(
-              (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = c.author_mobile),
+              (SELECT (f->>'name')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = c.author_name LIMIT 1),
+              c.author_name,
               m.name
             ) AS author_name,
-            COALESCE(
-              (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'mobile')::text = c.author_mobile),
+            REPLACE(COALESCE(
+              (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = c.author_name LIMIT 1),
               m.profile_photo_url
-            ) AS author_photo,
+            ), 'drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') AS author_photo,
             EXISTS(
               SELECT 1 FROM portal_comment_likes l
               WHERE l.comment_id = c.id AND l.member_id = $2 AND l.member_mobile = $3
