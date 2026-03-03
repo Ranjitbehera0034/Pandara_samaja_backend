@@ -45,4 +45,11 @@ router.get('/maker-checker', requireAuthSuperAdmin, adminController.getPendingAc
 router.post('/maker-checker/:id/review', requireAuthSuperAdmin, adminController.reviewAction);
 router.post('/maker-checker/:id/undo', requireAuthSuperAdmin, adminController.undoAction);
 
+// --- Matrimony Form Upload Verification (New Workflow) ---
+const matrimonyAppCtrl = require('../controllers/matrimonyApplicationController');
+router.get('/matrimony-forms/stats', matrimonyAppCtrl.adminStats);
+router.get('/matrimony-forms', matrimonyAppCtrl.adminGetAll);
+router.get('/matrimony-forms/:id', matrimonyAppCtrl.adminGetOne);
+router.put('/matrimony-forms/:id/review', matrimonyAppCtrl.adminReview);
+
 module.exports = router;

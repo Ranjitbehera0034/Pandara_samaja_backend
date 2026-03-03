@@ -117,5 +117,11 @@ module.exports = (upload) => {
     // ── Advanced Features ──
     router.get('/live/streams', requirePortalAuth, communityCtrl.getLiveStreams);
 
+    // ── Matrimony Form Upload (Member side) ──
+    const matrimonyAppCtrl = require('../controllers/matrimonyApplicationController');
+    router.post('/matrimony/submit', requirePortalAuth, upload.single('form_file'), matrimonyAppCtrl.submitForm);
+    router.get('/matrimony/my-application', requirePortalAuth, matrimonyAppCtrl.getMyApplication);
+    router.get('/matrimony/family-applications', requirePortalAuth, matrimonyAppCtrl.getFamilyApplications);
+
     return router;
 };
