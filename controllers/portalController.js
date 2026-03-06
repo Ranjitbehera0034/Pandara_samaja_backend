@@ -1,7 +1,7 @@
 // controllers/portalController.js — Member Portal API handlers
 const jwt = require('jsonwebtoken');
 const portal = require('../models/portalModel');
-const { uploadFile } = require('../config/googleDrive');
+const { uploadFile, FOLDER_MAP } = require('../config/googleDrive');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebase');
 const { logUserAction } = require('../utils/auditLogger');
@@ -259,7 +259,7 @@ exports.uploadProfilePhoto = async (req, res) => {
         }
 
         // Update specific family member profile photo
-        const url = await uploadFile(req.file);
+        const url = await uploadFile(req.file, FOLDER_MAP.MEMBERS);
         await portal.updateFamilyMemberPhoto(
             req.portalMember.membership_no,
             req.portalMember.mobile,
@@ -340,7 +340,7 @@ exports.createPost = async (req, res) => {
         const imageUrls = [];
         for (const file of files) {
             try {
-                const url = await uploadFile(file);
+                const url = await uploadFile(file, FOLDER_MAP.GALLERY);
                 imageUrls.push(url);
             } catch (uploadErr) {
                 console.error('Image upload error:', uploadErr);
@@ -793,7 +793,7 @@ exports.uploadPhotos = async (req, res) => {
 
         for (const file of files) {
             try {
-                const url = await uploadFile(file);
+                const url = await uploadFile(file, FOLDER_MAP.GALLERY);
                 const photo = await portal.addPhoto(
                     req.portalMember.membership_no,
                     url,
