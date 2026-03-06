@@ -135,4 +135,5 @@ async function uploadFile(file, targetFolderId = null) {
   return `https://drive.google.com/uc?id=${fileId}`;
 }
 
-module.exports = { uploadFile, FOLDER_MAP };
+module.exports = { uploadFile, FOLDER_MAP, drive };
+
