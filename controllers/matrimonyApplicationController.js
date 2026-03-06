@@ -129,7 +129,7 @@ exports.submitForm = async (req, res) => {
 exports.getMyApplication = async (req, res) => {
     try {
         const member = req.portalMember;
-        const application = await matrimonyApp.getApplicationForMember(member.membership_no, member.mobile);
+        const application = await ApplicationModel.getApplicationForMember(member.membership_no, member.mobile);
         if (!application) {
             return res.json({ success: true, application: null });
         }
@@ -147,7 +147,7 @@ exports.getMyApplication = async (req, res) => {
 exports.getFamilyApplications = async (req, res) => {
     try {
         const member = req.portalMember;
-        const apps = await matrimonyApp.getApplicationsByMembership(member.membership_no);
+        const apps = await ApplicationModel.getApplicationsByMembership(member.membership_no);
         res.json({ success: true, applications: apps.map(sanitizeForMember) });
     } catch (err) {
         console.error('[MatrimonyApp] getFamilyApplications error:', err);
@@ -169,7 +169,7 @@ exports.adminGetAll = async (req, res) => {
         const status = req.query.status || null;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 50;
-        const apps = await matrimonyApp.getAllApplications({ status, page, limit });
+        const apps = await ApplicationModel.getAllApplications({ status, page, limit });
         res.json({ success: true, applications: apps });
     } catch (err) {
         console.error('[MatrimonyApp] adminGetAll error:', err);
@@ -183,13 +183,13 @@ exports.adminGetAll = async (req, res) => {
  */
 exports.adminGetOne = async (req, res) => {
     try {
-        const app = await matrimonyApp.getApplicationById(req.params.id);
+        const app = await ApplicationModel.getApplicationById(req.params.id);
         if (!app) return res.status(404).json({ success: false, message: 'Application not found.' });
 
         // Mark as under_review if it was pending
         if (app.status === 'pending') {
             const adminUser = req.user ? req.user.username : 'admin';
-            await matrimonyApp.updateApplicationStatus(req.params.id, {
+            await ApplicationModel.updateApplicationStatus(req.params.id, {
                 status: 'under_review',
                 reviewedBy: adminUser,
                 adminRemarks: null,
@@ -233,7 +233,7 @@ exports.adminReview = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide a reason/remarks for this action.' });
         }
 
-        const updated = await matrimonyApp.updateApplicationStatus(req.params.id, {
+        const updated = await ApplicationModel.updateApplicationStatus(req.params.id, {
             status: newStatus,
             adminRemarks: remarks || null,
             reviewedBy: adminUser,
