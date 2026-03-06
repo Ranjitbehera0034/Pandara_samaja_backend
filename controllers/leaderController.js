@@ -1,5 +1,6 @@
 const LeaderModel = require('../models/leaderModel');
 const gDrive = require('../config/googleDrive');
+const { FOLDER_MAP } = require('../config/googleDrive');
 
 exports.getAllLeaders = async (req, res, next) => {
   try {
@@ -52,7 +53,7 @@ exports.createLeader = async (req, res, next) => {
   try {
     let image_url = req.body.image_url || null;
     if (req.file) {
-      image_url = await gDrive.uploadFile(req.file);
+      image_url = await gDrive.uploadFile(req.file, FOLDER_MAP.LEADERS);
     }
     const data = {
       ...req.body,
@@ -70,10 +71,10 @@ exports.createLeader = async (req, res, next) => {
 };
 exports.updateLeader = async (req, res, next) => {
   try {
-    let image_url = req.body.image_url || null;
+    let image_url = req.body.existingImage || null;
     if (req.file) {
-      image_url = await gDrive.uploadFile(req.file);
-    } else if (!image_url && req.body.existingImage) {
+      image_url = await gDrive.uploadFile(req.file, FOLDER_MAP.LEADERS);
+    } else if (!image_url && req.body.removeImage !== 'true') {
       image_url = req.body.existingImage;
     }
     const data = {

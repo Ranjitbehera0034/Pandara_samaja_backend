@@ -1,5 +1,6 @@
 const Post = require('../models/blogModel');
 const gDrive = require('../config/googleDrive');
+const { FOLDER_MAP } = require('../config/googleDrive');
 exports.getAll = async (req, res, next) => {
   try {
     const {
@@ -38,7 +39,7 @@ exports.create = async (req, res, next) => {
     } = req.body;
     let image_url = null;
     if (req.file) {
-      image_url = await gDrive.uploadFile(req.file);
+      image_url = await gDrive.uploadFile(req.file, FOLDER_MAP.POSTS);
     }
     const {
       rows
@@ -63,7 +64,7 @@ exports.update = async (req, res, next) => {
     // Check if an existing Image URL was passed
     let image_url = req.body.existingImage || null;
     if (req.file) {
-      image_url = await gDrive.uploadFile(req.file);
+      image_url = await gDrive.uploadFile(req.file, FOLDER_MAP.POSTS);
     } else if (!image_url) {
       // If no file and no existing image passed, get existing row and keep its image unless they explicitly removed it
       // Actually, if they didn't pass existingImage, see if they passed `removeImage=true`

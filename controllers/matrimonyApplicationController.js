@@ -1,8 +1,8 @@
 // controllers/matrimonyApplicationController.js
 // Handles member-facing and admin-facing matrimony form upload/verification
 
-const matrimonyApp = require('../models/matrimonyApplicationModel');
-const { uploadFile } = require('../config/googleDrive');
+const ApplicationModel = require('../models/matrimonyApplicationModel');
+const { uploadFile, FOLDER_MAP } = require('../config/googleDrive');
 const pool = require('../config/db');
 
 // ══════════════════════════════════════════════════
@@ -65,14 +65,14 @@ exports.submitForm = async (req, res) => {
         const memberName = req.body.member_name || member.name;
         const relationToHof = member.relation || 'Self/Head';
 
-        // Upload to Google Drive
-        const fileUrl = await uploadFile(req.file);
-
-        // Determine file type
-        const mime = req.file.mimetype || '';
+        let form_file_url = null;
+        if (req.file) {
+            const fileUrl = await uploadFile(req.file, FOLDER_MAP.MATRIMONY_FORMS);
+            form_file_url = fileUrl;
+        } const mime = req.file.mimetype || '';
         const fileType = mime.includes('pdf') ? 'pdf' : mime.includes('png') ? 'png' : 'jpg';
 
-        const result = await matrimonyApp.submitApplication({
+        const result = await ApplicationModel.submitApplication({
             memberId: member.membership_no,
             membershipNo: member.membership_no,
             memberName,

@@ -1,5 +1,6 @@
-const gDrive = require('../config/googleDrive');
+const Candidate = require('../models/candidateModel');
 const model = require('../models/candidateModel');
+const { uploadFile, FOLDER_MAP } = require('../config/googleDrive');
 
 // controller
 exports.getAll = async (req, res) => {
@@ -41,14 +42,13 @@ exports.create = async (req, res, next) => {
     });
 
     // 2. Handle uploads: photo AND manual_form
-    if (req.files) {
-      if (req.files.photo) {
-        data.photo = await gDrive.uploadFile(req.files.photo[0]);
-      }
-      if (req.files.manual_form) {
-        data.manual_form = await gDrive.uploadFile(req.files.manual_form[0]);
-      }
+    if (req.files && req.files.photo && req.files.photo.length > 0) {
+      data.photo = await uploadFile(req.files.photo[0], FOLDER_MAP.MATRIMONY_PHOTOS);
     }
+    if (req.files && req.files.manual_form && req.files.manual_form.length > 0) {
+      data.manual_form = await uploadFile(req.files.manual_form[0], FOLDER_MAP.MATRIMONY_FORMS);
+    }
+
 
     if (!data.photo && data.photoUrl) {
       data.photo = data.photoUrl;
@@ -73,15 +73,14 @@ exports.update = async (req, res, next) => {
     }
 
     if (req.files) {
-      if (req.files.photo) {
-        data.photo = await gDrive.uploadFile(req.files.photo[0]);
-      } else if (existing) {
-        data.photo = existing.photo;
+      if (req.files && req.files.photo && req.files.photo.length > 0) {
+        data.photo = await uploadFile(req.files.photo[0], FOLDER_MAP.MATRIMONY_PHOTOS);
+      } else if (!data.photo) {
+        delete data.photo;
       }
-
-      if (req.files.manual_form) {
-        data.manual_form = await gDrive.uploadFile(req.files.manual_form[0]);
-      } else if (existing) {
+      if (req.files && req.files.manual_form && req.files.manual_form.length > 0) {
+        data.manual_form = await uploadFile(req.files.manual_form[0], FOLDER_MAP.MATRIMONY_FORMS);
+      } else if (!data.manual_form) {
         data.manual_form = existing.manual_form;
       }
     } else if (existing) {

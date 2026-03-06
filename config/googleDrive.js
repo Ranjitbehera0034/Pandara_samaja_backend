@@ -6,8 +6,18 @@ const mime = require('mime-types');
 
 const FOLDER_ID = process.env.DRIVE_FOLDER_ID;
 if (!FOLDER_ID) {
-  console.warn('⚠️ DRIVE_FOLDER_ID is not set. File uploads will fail.');
+  console.warn('⚠️ DRIVE_FOLDER_ID is not set. Fallback root file uploads will fail.');
 }
+
+// Pre-defined folder mappings based on user configuration
+const FOLDER_MAP = {
+  LEADERS: '1UGKEfId5vOGoYdlK2aNPGXUywf4ERo5V',
+  MEMBERS: '1s9jRodM_KCJe34Eqv7hQ7XC32KL9YAbu',
+  GALLERY: '1mKlTitCw1Sx5Lob7Na9YTcJiF-noyZLI',
+  MATRIMONY_PHOTOS: '1duFJDDHvXQxdcgYl1KxtPNPLX22AT-GK',
+  MATRIMONY_FORMS: '1YHsYnwy5uO4SR-V-YnHxwz_qaq8QszYc',
+  POSTS: '1OaAg0iQXxQeyiCD_cd2Ok87mEYh3mJiA',
+};
 
 let drive;
 
@@ -50,9 +60,10 @@ if (process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_CLIENT_ID) {
  * @param {string} file.mimetype
  * @param {Buffer} [file.buffer]
  * @param {string} [file.path]
+ * @param {string} [targetFolderId] Optional specific Google Drive folder ID to upload to
  * @returns {Promise<string>} public URL
  */
-async function uploadFile(file) {
+async function uploadFile(file, targetFolderId = null) {
   if (!file || !file.originalname) {
     throw new Error('Invalid file object passed to uploadFile');
   }
@@ -91,8 +102,9 @@ async function uploadFile(file) {
     name: finalOriginalName,
   };
 
-  if (FOLDER_ID) {
-    createReqBody.parents = [FOLDER_ID];
+  const parentFolder = targetFolderId || FOLDER_ID;
+  if (parentFolder) {
+    createReqBody.parents = [parentFolder];
   }
 
   const res = await drive.files.create({
@@ -123,4 +135,4 @@ async function uploadFile(file) {
   return `https://drive.google.com/uc?id=${fileId}`;
 }
 
-module.exports = { uploadFile };
+module.exports = { uploadFile, FOLDER_MAP };
