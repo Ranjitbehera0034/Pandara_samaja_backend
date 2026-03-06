@@ -11,6 +11,35 @@ class LeaderModel {
         return result.rows;
     }
 
+    // Flexible filter: level and/or location (case-insensitive)
+    static async findByFilter({ level, location } = {}) {
+        const conditions = [];
+        const params = [];
+        if (level) {
+            params.push(level);
+            conditions.push(`LOWER(level) = LOWER($${params.length})`);
+        }
+        if (location) {
+            params.push(location);
+            conditions.push(`LOWER(location) = LOWER($${params.length})`);
+        }
+        const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+        const result = await pool.query(
+            `SELECT * FROM leaders ${where} ORDER BY display_order, created_at ASC`,
+            params
+        );
+        return result.rows;
+    }
+
+    // Get distinct location values for a given level (for frontend dropdowns)
+    static async getLocationsByLevel(level) {
+        const result = await pool.query(
+            `SELECT DISTINCT location FROM leaders WHERE LOWER(level) = LOWER($1) AND location IS NOT NULL ORDER BY location ASC`,
+            [level]
+        );
+        return result.rows.map(r => r.location);
+    }
+
     static async findById(id) {
         const result = await pool.query('SELECT * FROM leaders WHERE id = $1', [id]);
         return result.rows[0] || null;

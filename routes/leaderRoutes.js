@@ -7,6 +7,7 @@ module.exports = (upload) => {
 
     // Public lookup
     router.get('/', leaderController.getAllLeaders);
+    router.get('/locations', leaderController.getLeaderLocations); // distinct locations per level
     router.get('/:id', leaderController.getLeaderById);
 
     // Admin secure operations
