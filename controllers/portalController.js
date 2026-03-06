@@ -4,6 +4,7 @@ const portal = require('../models/portalModel');
 const { uploadFile } = require('../config/googleDrive');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebase');
+const { logUserAction } = require('../utils/auditLogger');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -95,10 +96,23 @@ exports.loginWithFirebase = async (req, res, next) => {
             loggedInUser: result.matchedUser
         });
 
+        // Log the login activity (non-blocking)
+        const loginName = result.matchedUser?.name || member.name;
+        logUserAction(
+            member.id || null,
+            loginName,
+            'LOGIN',
+            'Member',
+            member.membership_no,
+            { membership_no: member.membership_no },
+            req
+        );
+
     } catch (error) {
         next(error);
     }
 };
+
 
 // ═══════════════════════════════════════════════════
 //  PROFILE
@@ -371,11 +385,23 @@ exports.createPost = async (req, res) => {
             message: 'Post published!',
             post: enriched
         });
+
+        // Log the post creation (non-blocking)
+        logUserAction(
+            null,
+            member.name,
+            'CREATE_POST',
+            'Post',
+            post.id,
+            { preview: (text || '').substring(0, 80), hasImages: imageUrls.length > 0 },
+            req
+        );
     } catch (error) {
         console.error('Create post error:', error);
         res.status(500).json({ success: false, message: 'Failed to create post' });
     }
 };
+
 
 /**
  * GET /api/portal/posts
@@ -541,11 +567,23 @@ exports.toggleLike = async (req, res) => {
             liked: result.liked,
             likes_count: result.likes_count
         });
+
+        // Log the like/unlike (non-blocking)
+        logUserAction(
+            null,
+            req.portalMember.name,
+            result.liked ? 'LIKE_POST' : 'UNLIKE_POST',
+            'Post',
+            req.params.id,
+            {},
+            req
+        );
     } catch (error) {
         console.error('Toggle like error:', error);
         res.status(500).json({ success: false, message: 'Failed to toggle like' });
     }
 };
+
 
 
 // ═══════════════════════════════════════════════════
@@ -634,11 +672,23 @@ exports.addComment = async (req, res) => {
         }
 
         res.status(201).json({ success: true, comment });
+
+        // Log the comment (non-blocking)
+        logUserAction(
+            null,
+            member.name,
+            'COMMENT_POST',
+            'Post',
+            req.params.id,
+            { preview: text.trim().substring(0, 100) },
+            req
+        );
     } catch (error) {
         console.error('Add comment error:', error);
         res.status(500).json({ success: false, message: 'Failed to add comment' });
     }
 };
+
 
 /**
  * GET /api/portal/posts/:id/comments

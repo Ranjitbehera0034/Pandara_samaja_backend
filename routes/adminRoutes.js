@@ -13,6 +13,10 @@ router.delete('/reports/:reportId/dismiss', adminController.dismissReport);
 router.delete('/posts/:postId', adminController.deletePortalPost);
 router.get('/stats', adminController.getDashboardStats);
 
+// Broadcasts & Channels
+router.post('/broadcast/whatsapp', adminController.broadcastWhatsapp);
+router.post('/channel/post', adminController.postToChannel);
+
 // Matrimony Admin
 router.get('/candidates', adminController.getAllCandidates);
 router.put('/candidates/:candidateId/status', adminController.updateCandidateStatus);
@@ -39,6 +43,7 @@ const { requireAuthSuperAdmin } = require('../middleware/auth');
 
 // Audit Logs
 router.get('/audit-logs', requireAuthSuperAdmin, adminController.getAuditLogs);
+router.get('/user-audit-logs', requireAuthAdmin, adminController.getUserAuditLogs);
 
 // Maker-Checker
 router.get('/maker-checker', requireAuthSuperAdmin, adminController.getPendingActions);
