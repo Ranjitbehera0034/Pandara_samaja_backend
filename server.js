@@ -1,4 +1,5 @@
-const { app, allowedOrigins } = require("./app");
+const { app, allowedOrigins } = require('./app');
+const { logUserAction } = require('./utils/auditLogger');
 
 /* ─── 4. Start server ─────────────────────────────────────── */
 const PORT = process.env.PORT || 5000;
@@ -137,8 +138,21 @@ io.on('connection', (socket) => {
       // Send to receiver's room
       io.to(`user:${receiverId}-${cleanReceiverMobile}`).emit('receive_message', messagePayload);
 
-      // Also echo back to sender (confirmation)
+      // Echo back to sender (confirmation)
       socket.emit('message_sent', messagePayload);
+
+      // Log chat message (non-blocking)
+      logUserAction(
+        null,
+        senderName,
+        'SEND_MESSAGE',
+        'Member',
+        receiverId,
+        { preview: content.trim().substring(0, 80), type: type || 'text' },
+        null,
+        socket.handshake.address,
+        socket.handshake.headers?.['user-agent'] || null
+      );
 
       // Create a notification for the receiver
       try {

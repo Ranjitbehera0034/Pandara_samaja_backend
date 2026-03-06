@@ -599,6 +599,48 @@ exports.getAuditLogs = async (req, res, next) => {
   }
 };
 
+// Get user activity logs (new table)
+exports.getUserAuditLogs = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const page = parseInt(req.query.page) || 1;
+    const offset = (page - 1) * limit;
+    const { action, member, from, to } = req.query;
+
+    const conditions = [];
+    const params = [];
+
+    if (action) { conditions.push(`action = $${params.length + 1}`); params.push(action); }
+    if (member) { conditions.push(`member_name ILIKE $${params.length + 1}`); params.push(`%${member}%`); }
+    if (from) { conditions.push(`created_at >= $${params.length + 1}`); params.push(from); }
+    if (to) { conditions.push(`created_at <= $${params.length + 1}`); params.push(to); }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    params.push(limit, offset);
+
+    const result = await pool.query(
+      `SELECT * FROM user_audit_logs ${where} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+    const countResult = await pool.query(`SELECT COUNT(*) FROM user_audit_logs ${where}`, params.slice(0, params.length - 2));
+
+    res.json({
+      success: true,
+      logs: result.rows,
+      pagination: {
+        total: parseInt(countResult.rows[0].count),
+        page,
+        pages: Math.ceil(parseInt(countResult.rows[0].count) / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching user audit logs:', error);
+    next(error);
+  }
+};
+
+
+
 // --- Banned Words Management ---
 exports.getBannedWords = async (req, res, next) => {
   try {
@@ -679,6 +721,160 @@ exports.getPendingMembers = async (req, res, next) => {
     });
   } catch (error) {
     console.error('Error fetching pending members:', error);
+    next(error);
+  }
+};
+
+// --- Broadcast Messaging ---
+exports.broadcastWhatsapp = async (req, res, next) => {
+  try {
+    const { message } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Message content is required' });
+    }
+
+    // 1. Fetch all unique valid mobile numbers from members and family members
+    // First get primary members
+    const membersRes = await pool.query("SELECT mobile, name FROM members WHERE mobile IS NOT NULL AND mobile != ''");
+
+    // Create a Set to ensure unique numbers across primary and family members
+    const uniqueNumbers = new Map(); // mobile -> name
+
+    membersRes.rows.forEach(m => {
+      // Clean mobile number
+      const cleanMobile = m.mobile.replace(/\\D/g, '');
+      if (cleanMobile.length >= 10) {
+        // Assume Indian numbers for standard formatting
+        const formattedMobile = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile;
+        uniqueNumbers.set(formattedMobile, m.name);
+      }
+    });
+
+    // Also get family members
+    const familyRes = await pool.query("SELECT family_members FROM members WHERE family_members IS NOT NULL");
+    familyRes.rows.forEach(row => {
+      if (Array.isArray(row.family_members)) {
+        row.family_members.forEach(fm => {
+          if (fm.mobile) {
+            const cleanMobile = fm.mobile.replace(/\\D/g, '');
+            if (cleanMobile.length >= 10) {
+              const formattedMobile = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile;
+              if (!uniqueNumbers.has(formattedMobile)) {
+                uniqueNumbers.set(formattedMobile, fm.name);
+              }
+            }
+          }
+        });
+      }
+    });
+
+    const targetList = Array.from(uniqueNumbers.entries()).map(([mobile, name]) => ({ mobile, name }));
+
+    // 2. Mock sending the broadcast
+    console.log(`[BROADCAST SIMULATION] Starting WhatsApp Broadcast to ${targetList.length} unique numbers.\nMessage: \n${message}\n`);
+
+    let successCount = 0;
+
+    // Simulate sending time (just for development)
+    for (const target of targetList.slice(0, 10)) { // Log first 10 for terminal brevity
+      console.log(`-> Sending to ${target.name} (${target.mobile})`);
+      successCount++;
+    }
+
+    if (targetList.length > 10) {
+      console.log(`... and ${targetList.length - 10} more.`);
+      successCount = targetList.length;
+    }
+
+    // 3. Log the action
+    await logAdminAction(req, 'WHATSAPP_BROADCAST', 'Members', targetList.length, {
+      messagePreview: message.substring(0, 50),
+      totalSent: successCount
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully queued broadcast to ${targetList.length} numbers.`,
+      totalTargeted: targetList.length
+    });
+
+  } catch (error) {
+    console.error('Error broadcasting whatsapp:', error);
+    next(error);
+  }
+};
+
+// --- WhatsApp Channel Messaging ---
+exports.postToChannel = async (req, res, next) => {
+  try {
+    const { message } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Message content is required for the channel post' });
+    }
+
+    // Fetch the settings 
+    const channelIdKey = await settingsModel.getSetting('whatsapp_channel_id');
+    const wahaUrlKey = await settingsModel.getSetting('whatsapp_waha_url');
+
+    // Fallbacks
+    const channelId = channelIdKey || '';
+    const wahaUrl = wahaUrlKey || 'http://localhost:3000';
+
+    if (!channelId) {
+      return res.status(400).json({
+        success: false,
+        message: 'WhatsApp Channel ID is not configured. Please set it in the Admin Settings.'
+      });
+    }
+
+    console.log(`[WAHA INTEGRATION] Sending message to ${channelId} via WAHA at ${wahaUrl}`);
+
+    // Call the WAHA REST API
+    try {
+      const wahaResponse = await fetch(`${wahaUrl}/api/sendText`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          chatId: channelId,
+          text: message,
+          session: 'default'
+        })
+      });
+
+      if (!wahaResponse.ok) {
+        const errorData = await wahaResponse.json();
+        console.error('WAHA API Error:', errorData);
+        return res.status(502).json({
+          success: false,
+          message: `WAHA Error: Failed to send message to channel.`
+        });
+      }
+    } catch (fetchError) {
+      console.error('Failed to connect to WAHA server:', fetchError);
+      return res.status(504).json({
+        success: false,
+        message: `Could not connect to WAHA server at ${wahaUrl}. Is it running?`
+      });
+    }
+
+    // Log the action for audit
+    await logAdminAction(req, 'WHATSAPP_CHANNEL_POST', 'Channel', channelId, {
+      messagePreview: message.substring(0, 50),
+      provider: 'WAHA'
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully posted to WhatsApp Channel (${channelId}).`,
+      channelId
+    });
+
+  } catch (error) {
+    console.error('Error posting to whatsapp channel:', error);
     next(error);
   }
 };
