@@ -88,7 +88,7 @@ exports.loginWithFirebase = async (req, res, next) => {
                 village: member.village,
                 address: member.address,
                 head_gender: member.head_gender,
-                profile_photo_url: member.profile_photo_url ? member.profile_photo_url.replace('drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') : null,
+                profile_photo_url: member.profile_photo_url ? member.profile_photo_url.replace('drive.google.com/uc?id=', '/api/v1/image-proxy/') : null,
                 // Mask Aadhaar for security
                 aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null,
                 family_members: member.family_members || []
@@ -153,7 +153,7 @@ exports.getProfile = async (req, res) => {
                 village: member.village,
                 address: member.address,
                 head_gender: member.head_gender,
-                profile_photo_url: profilePhotoUrl ? profilePhotoUrl.replace('drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') : null,
+                profile_photo_url: profilePhotoUrl ? profilePhotoUrl.replace('drive.google.com/uc?id=', '/api/v1/image-proxy/') : null,
                 // Mask Aadhaar for security
                 aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null,
                 family_members: member.family_members || []
@@ -236,7 +236,7 @@ exports.updateProfile = async (req, res) => {
                 panchayat: updated.panchayat,
                 village: updated.village,
                 address: updated.address,
-                profile_photo_url: updated.profile_photo_url ? updated.profile_photo_url.replace('drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') : null,
+                profile_photo_url: updated.profile_photo_url ? updated.profile_photo_url.replace('drive.google.com/uc?id=', '/api/v1/image-proxy/') : null,
                 // Mask Aadhaar for security
                 aadhar_no: updated.aadhar_no ? `********${updated.aadhar_no.slice(-4)}` : null,
                 family_members: updated.family_members || []
@@ -269,7 +269,7 @@ exports.uploadProfilePhoto = async (req, res) => {
         // Also save to gallery (associated with membership_no)
         await portal.addPhoto(req.portalMember.membership_no, url, `Profile Photo - ${req.portalMember.name}`);
 
-        const cleanedUrl = url ? url.replace('drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') : url;
+        const cleanedUrl = url ? url.replace('drive.google.com/uc?id=', '/api/v1/image-proxy/') : url;
 
         res.json({
             success: true,

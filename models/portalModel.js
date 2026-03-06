@@ -196,7 +196,7 @@ exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null, mobile = 
             REPLACE(COALESCE(
               (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = p.author_name LIMIT 1),
               m.profile_photo_url
-            ), 'drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') AS author_photo,
+            ), 'drive.google.com/uc?id=', '/api/v1/image-proxy/') AS author_photo,
             m.village AS author_village,
             m.district AS author_district,
             EXISTS(
@@ -227,7 +227,7 @@ exports.getPost = async (postId, membershipNo, mobile) => {
             REPLACE(COALESCE(
               (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = p.author_name LIMIT 1),
               m.profile_photo_url
-            ), 'drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') AS author_photo,
+            ), 'drive.google.com/uc?id=', '/api/v1/image-proxy/') AS author_photo,
             m.village AS author_village,
             m.district AS author_district,
             EXISTS(
@@ -404,7 +404,7 @@ exports.addComment = async (postId, memberId, text, commenterName, commenterPhot
                 REPLACE(COALESCE(
                   (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = c.author_name LIMIT 1),
                   m.profile_photo_url
-                ), 'drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') AS author_photo
+                ), 'drive.google.com/uc?id=', '/api/v1/image-proxy/') AS author_photo
        FROM portal_comments c
        JOIN members m ON m.membership_no = c.member_id
        WHERE c.id = $1`,
@@ -508,7 +508,7 @@ exports.getComments = async (postId, memberId, memberMobile, parentId = null, pa
             REPLACE(COALESCE(
               (SELECT (f->>'profile_photo_url')::text FROM jsonb_array_elements(COALESCE(m.family_members, '[]'::jsonb)) f WHERE (f->>'name')::text = c.author_name LIMIT 1),
               m.profile_photo_url
-            ), 'drive.google.com/uc?id=', 'lh3.googleusercontent.com/d/') AS author_photo,
+            ), 'drive.google.com/uc?id=', '/api/v1/image-proxy/') AS author_photo,
             EXISTS(
               SELECT 1 FROM portal_comment_likes l
               WHERE l.comment_id = c.id AND l.member_id = $2 AND l.member_mobile = $3
