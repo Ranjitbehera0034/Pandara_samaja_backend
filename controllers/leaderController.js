@@ -1,13 +1,12 @@
 const LeaderModel = require('../models/leaderModel');
 const gDrive = require('../config/googleDrive');
+
 exports.getAllLeaders = async (req, res, next) => {
   try {
-    const {
-      level
-    } = req.query;
+    const { level, location } = req.query;
     let leaders;
-    if (level) {
-      leaders = await LeaderModel.findByLevel(level);
+    if (level || location) {
+      leaders = await LeaderModel.findByFilter({ level, location });
     } else {
       leaders = await LeaderModel.findAll();
     }
@@ -21,6 +20,19 @@ exports.getAllLeaders = async (req, res, next) => {
     next(err);
   }
 };
+
+// GET /api/v1/leaders/locations?level=District — distinct locations for a level
+exports.getLeaderLocations = async (req, res, next) => {
+  try {
+    const { level } = req.query;
+    if (!level) return res.json({ success: true, data: [] });
+    const locations = await LeaderModel.getLocationsByLevel(level);
+    res.json({ success: true, data: locations });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.getLeaderById = async (req, res, next) => {
   try {
     const leader = await LeaderModel.findById(req.params.id);
