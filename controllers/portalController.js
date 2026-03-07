@@ -179,7 +179,7 @@ exports.updateProfile = async (req, res) => {
 
         if (isHead) {
             // Head can update everything within allowed fields
-            const allowedFields = ['name', 'mobile', 'aadhar_no', 'address', 'district', 'taluka', 'panchayat', 'village', 'head_gender', 'male', 'female', 'family_members'];
+            const allowedFields = ['name', 'mobile', 'aadhar_no', 'address', 'district', 'taluka', 'panchayat', 'head_gender', 'male', 'female', 'family_members'];
             const updateData = {};
             for (const field of allowedFields) {
                 if (req.body[field] !== undefined) {
@@ -234,7 +234,6 @@ exports.updateProfile = async (req, res) => {
                 district: updated.district,
                 taluka: updated.taluka,
                 panchayat: updated.panchayat,
-                village: updated.village,
                 address: updated.address,
                 profile_photo_url: updated.profile_photo_url ? updated.profile_photo_url.replace('drive.google.com/uc?id=', '/api/v1/image-proxy/') : null,
                 // Mask Aadhaar for security
@@ -365,7 +364,7 @@ exports.createPost = async (req, res) => {
             authorId: member.membership_no,
             textContent: text || null,
             images: imageUrls,
-            location: member.village || null,
+            location: member.panchayat || member.taluka || member.district || null,
             authorName: member.name, // passes family member identity
             authorPhoto: authorPhoto,
             authorMobile: member.mobile
@@ -958,7 +957,8 @@ exports.getMembers = async (req, res) => {
         const filters = {
             search: (req.query.search || '').trim(),
             district: (req.query.district || '').trim(),
-            village: (req.query.village || '').trim(),
+            taluka: (req.query.taluka || '').trim(),
+            panchayat: (req.query.panchayat || '').trim(),
             gender: (req.query.gender || '').trim(),
             hasMobile: req.query.hasMobile === 'true',
         };
@@ -994,8 +994,38 @@ exports.getMembers = async (req, res) => {
  */
 exports.getMemberFilterOptions = async (req, res) => {
     try {
-        const districtMap = await portal.getMemberFilterOptions();
-        res.json({ success: true, districts: districtMap });
+        // Single query: fetch all distinct district/taluka/panchayat combinations
+        const { rows } = await pool.query(
+            `SELECT DISTINCT
+                TRIM(district)   AS district,
+                TRIM(taluka)     AS taluka,
+                TRIM(panchayat)  AS panchayat
+             FROM members
+             WHERE district IS NOT NULL AND district <> ''
+             ORDER BY district, taluka, panchayat`
+        );
+
+        const districts = [...new Set(rows.map(r => r.district).filter(Boolean))].sort();
+
+        // talukas: { [district]: string[] }
+        const talukas = {};
+        for (const r of rows) {
+            if (r.district && r.taluka) {
+                if (!talukas[r.district]) talukas[r.district] = [];
+                if (!talukas[r.district].includes(r.taluka)) talukas[r.district].push(r.taluka);
+            }
+        }
+
+        // panchayats: { [taluka]: string[] }
+        const panchayats = {};
+        for (const r of rows) {
+            if (r.taluka && r.panchayat) {
+                if (!panchayats[r.taluka]) panchayats[r.taluka] = [];
+                if (!panchayats[r.taluka].includes(r.panchayat)) panchayats[r.taluka].push(r.panchayat);
+            }
+        }
+
+        res.json({ success: true, filters: { districts, talukas, panchayats } });
     } catch (error) {
         console.error('Filter options error:', error);
         res.status(500).json({ success: false, message: 'Failed to load filter options' });

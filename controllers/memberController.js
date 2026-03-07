@@ -161,7 +161,6 @@ exports.importExcel = async (req, res, next) => {
         district: row.getCell(7).value?.toString().trim(),
         taluka: row.getCell(8).value?.toString().trim(),
         panchayat: row.getCell(9).value?.toString().trim(),
-        village: row.getCell(10).value?.toString().trim(),
         aadhar_no: row.getCell(11).value?.toString().trim() ?? null,
         family_members: [],
         // Excel import doesn't parse family members from text
@@ -203,7 +202,6 @@ exports.importRows = async (req, res, next) => {
         district: (r.district ?? '').toString().trim(),
         taluka: (r.taluka ?? '').toString().trim(),
         panchayat: (r.panchayat ?? '').toString().trim(),
-        village: (r.village ?? '').toString().trim(),
         aadhar_no: (r.aadhar_no ?? '').toString().trim() || null,
         family_members: r.family_members ?? [],
         address: (r.address ?? '').toString().trim() || null,
