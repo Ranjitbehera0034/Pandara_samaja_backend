@@ -109,6 +109,145 @@ exports.search = async (keyword, limit = 20, offset = 0) => {
   return res;
 };
 
+exports.getMemberFilterOptions = async () => {
+  const query = `
+        SELECT DISTINCT district, taluka, panchayat
+        FROM members
+        WHERE (is_banned IS NULL OR is_banned = false)
+          AND district IS NOT NULL AND TRIM(district) != ''
+        ORDER BY district, taluka, panchayat
+    `;
+  const res = await pool.query(query);
+
+  const districts = new Set();
+  const talukas = {};
+  const panchayats = {};
+
+  res.rows.forEach(row => {
+    const d = row.district?.trim();
+    const t = row.taluka?.trim();
+    const p = row.panchayat?.trim();
+
+    if (d) {
+      districts.add(d);
+      if (t) {
+        if (!talukas[d]) talukas[d] = new Set();
+        talukas[d].add(t);
+
+        if (p) {
+          if (!panchayats[t]) panchayats[t] = new Set();
+          panchayats[t].add(p);
+        }
+      }
+    }
+  });
+
+  const serializeSet = (obj) => {
+    const result = {};
+    for (const [key, set] of Object.entries(obj)) {
+      result[key] = Array.from(set).sort();
+    }
+    return result;
+  };
+
+  return {
+    districts: Array.from(districts).sort(),
+    talukas: serializeSet(talukas),
+    panchayats: serializeSet(panchayats)
+  };
+};
+
+exports.getFiltered = async (limit = 20, offset = 0, filters = {}) => {
+  const params = [];
+  const conditions = [];
+
+  if (filters.search) {
+    params.push(`%${filters.search}%`);
+    const idx = params.length;
+    conditions.push(`(LOWER(name) LIKE LOWER($${idx}) OR mobile LIKE $${idx} OR membership_no LIKE $${idx})`);
+  }
+  if (filters.district) {
+    params.push(filters.district);
+    conditions.push(`district = $${params.length}`);
+  }
+  if (filters.taluka) {
+    params.push(filters.taluka);
+    conditions.push(`taluka = $${params.length}`);
+  }
+  if (filters.panchayat) {
+    params.push(filters.panchayat);
+    conditions.push(`panchayat = $${params.length}`);
+  }
+  if (filters.gender === 'female') {
+    conditions.push(`LOWER(head_gender) IN ('female', 'f')`);
+  } else if (filters.gender === 'male') {
+    conditions.push(`LOWER(head_gender) NOT IN ('female', 'f')`);
+  }
+  if (filters.has_photo === 'true') {
+    conditions.push(`COALESCE(trim(profile_photo_url), '') != ''`);
+  } else if (filters.has_photo === 'false') {
+    conditions.push(`COALESCE(trim(profile_photo_url), '') = ''`);
+  }
+  if (filters.has_aadhar === 'true') {
+    conditions.push(`COALESCE(trim(aadhar_no), '') != ''`);
+  } else if (filters.has_aadhar === 'false') {
+    conditions.push(`COALESCE(trim(aadhar_no), '') = ''`);
+  }
+
+  const wherePart = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const query = `SELECT * FROM members ${wherePart} ORDER BY district, taluka, panchayat, name LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+
+  params.push(limit, offset);
+
+  const res = await pool.query(query, params);
+  res.rows.forEach(r => {
+    if (r.aadhar_no) r.aadhar_no = decrypt(r.aadhar_no);
+  });
+  return res;
+};
+
+exports.getFilteredCount = async (filters = {}) => {
+  const params = [];
+  const conditions = [];
+
+  if (filters.search) {
+    params.push(`%${filters.search}%`);
+    const idx = params.length;
+    conditions.push(`(LOWER(name) LIKE LOWER($${idx}) OR mobile LIKE $${idx} OR membership_no LIKE $${idx})`);
+  }
+  if (filters.district) {
+    params.push(filters.district);
+    conditions.push(`district = $${params.length}`);
+  }
+  if (filters.taluka) {
+    params.push(filters.taluka);
+    conditions.push(`taluka = $${params.length}`);
+  }
+  if (filters.panchayat) {
+    params.push(filters.panchayat);
+    conditions.push(`panchayat = $${params.length}`);
+  }
+  if (filters.gender === 'female') {
+    conditions.push(`LOWER(head_gender) IN ('female', 'f')`);
+  } else if (filters.gender === 'male') {
+    conditions.push(`LOWER(head_gender) NOT IN ('female', 'f')`);
+  }
+  if (filters.has_photo === 'true') {
+    conditions.push(`COALESCE(trim(profile_photo_url), '') != ''`);
+  } else if (filters.has_photo === 'false') {
+    conditions.push(`COALESCE(trim(profile_photo_url), '') = ''`);
+  }
+  if (filters.has_aadhar === 'true') {
+    conditions.push(`COALESCE(trim(aadhar_no), '') != ''`);
+  } else if (filters.has_aadhar === 'false') {
+    conditions.push(`COALESCE(trim(aadhar_no), '') = ''`);
+  }
+
+  const wherePart = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const res = await pool.query(`SELECT COUNT(*) FROM members ${wherePart}`, params);
+  return parseInt(res.rows[0].count, 10);
+};
+
 exports.getOne = async (id) => {
   // Use membership_no as the primary identifier since 'id' column does not exist
   const res = await pool.query("SELECT * FROM members WHERE membership_no = $1", [id]);
