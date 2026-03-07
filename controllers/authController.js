@@ -219,8 +219,9 @@ class AuthController {
         members: result.rows.map(m => ({
           membership_no: m.membership_no,
           name: m.name,
-          village: m.village,
           district: m.district,
+          taluka: m.taluka,
+          panchayat: m.panchayat,
           mobile: m.mobile
         }))
       });

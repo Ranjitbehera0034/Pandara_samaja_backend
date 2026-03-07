@@ -765,7 +765,7 @@ exports.deleteNotification = async (id, memberId, memberMobile) => {
 exports.getMembersWithSubscription = async (
     currentMemberId, currentMemberMobile,
     page = 1, limit = 30,
-    { search = '', district = '', village = '', gender = '', hasMobile = false } = {}
+    { search = '', district = '', taluka = '', panchayat = '', gender = '', hasMobile = false } = {}
 ) => {
     const offset = (page - 1) * limit;
     const params = [currentMemberId, currentMemberMobile];
@@ -793,9 +793,13 @@ exports.getMembersWithSubscription = async (
         params.push(district);
         conditions.push(`m.district = $${params.length}`);
     }
-    if (village) {
-        params.push(village);
-        conditions.push(`m.village = $${params.length}`);
+    if (taluka) {
+        params.push(taluka);
+        conditions.push(`m.taluka = $${params.length}`);
+    }
+    if (panchayat) {
+        params.push(panchayat);
+        conditions.push(`m.panchayat = $${params.length}`);
     }
     if (gender === 'female') {
         conditions.push(`LOWER(m.head_gender) IN ('female', 'f')`);
@@ -831,7 +835,7 @@ exports.getMembersWithSubscription = async (
  */
 exports.getMembersCount = async (
     currentMemberId,
-    { search = '', district = '', village = '', gender = '', hasMobile = false } = {}
+    { search = '', district = '', taluka = '', panchayat = '', gender = '', hasMobile = false } = {}
 ) => {
     const params = [currentMemberId];
     const conditions = [
@@ -858,9 +862,13 @@ exports.getMembersCount = async (
         params.push(district);
         conditions.push(`m.district = $${params.length}`);
     }
-    if (village) {
-        params.push(village);
-        conditions.push(`m.village = $${params.length}`);
+    if (taluka) {
+        params.push(taluka);
+        conditions.push(`m.taluka = $${params.length}`);
+    }
+    if (panchayat) {
+        params.push(panchayat);
+        conditions.push(`m.panchayat = $${params.length}`);
     }
     if (gender === 'female') {
         conditions.push(`LOWER(m.head_gender) IN ('female', 'f')`);
