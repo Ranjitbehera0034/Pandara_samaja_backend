@@ -1,347 +1,210 @@
-# Pandara Samaja Backend
+# 🔧 Pandara Samaja — Backend API
 
-Backend API for the Nikhila Odisha Pandara Samaja website, providing matrimony candidates, member management, and blog functionality with JWT authentication.
+<p align="center">
+  <strong>REST API + WebSocket server for the Nikhila Odisha Pandara Samaja platform</strong><br/>
+  Built with Node.js, Express, PostgreSQL, and Google Drive.
+</p>
 
-## 🚀 Quick Start
+<p align="center">
+  <a href="https://pandara-samaja-backend.onrender.com/api/v1">🌐 Live API</a> ·
+  <a href="https://github.com/Ranjitbehera0034/Pandara_samaja">📱 Frontend Repo</a>
+</p>
 
-### Prerequisites
-- Node.js (v14 or higher)
-- PostgreSQL database
-- npm or yarn
-
-### Installation
-
-1. **Clone and install dependencies:**
-```bash
-npm install
-```
-
-2. **Set up environment variables:**
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-3. **Set up the database:**
-```bash
-# Run the users table schema
-psql $DATABASE_URL -f schema/users.sql
-```
-
-4. **Start the server:**
-```bash
-# Development mode with auto-reload
-npm run dev
-
-# Production mode
-npm start
-```
-
-The server will start on `http://localhost:5000` (or your configured PORT).
-
-## 📚 Documentation
-
-- **[SETUP.md](SETUP.md)** - Detailed setup instructions and configuration
-- **[API_REFERENCE.md](API_REFERENCE.md)** - Complete API endpoint documentation with examples
-- **[CHANGELOG.md](CHANGELOG.md)** - List of all changes and updates
-
-## 🔑 Key Features
-
-### Authentication System
-- JWT-based authentication
-- Secure password hashing with bcryptjs
-- Role-based access control (admin/user)
-- Token expiration and validation
-
-### API Endpoints
-
-#### 🔐 Authentication (`/api/auth`)
-- `POST /login` - User login
-- `POST /register` - User registration
-- `GET /verify` - Token verification
-- `GET /me` - Get current user
-
-#### 👥 Matrimony Candidates (`/api/candidates`)
-- `GET /` - List all candidates
-- `GET /?gender=male|female` - Filter by gender
-- `GET /:id` - Get single candidate
-- `POST /` 🔒 - Create candidate
-- `PUT /:id` 🔒 - Update candidate
-- `DELETE /:id` 🔒 - Delete candidate
-
-#### 📝 Blog Posts (`/api/posts`)
-- `GET /` - List all posts
-- `GET /:id` - Get single post
-- `POST /` 🔒 - Create post
-- `PUT /:id` 🔒 - Update post
-- `DELETE /:id` 🔒 - Delete post
-
-#### 👨‍👩‍👧‍👦 Members (`/api/members`)
-- `GET /` - List all members
-- `GET /export` - Export to Excel
-- `POST /import` 🔒 - Import from Excel
-- `POST /import-rows` 🔒 - Import from JSON
-
-🔒 = Requires authentication
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Create a `.env` file in the root directory:
-
-```env
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/db_name
-
-# JWT
-JWT_SECRET=your-secure-random-secret-key
-JWT_EXPIRES_IN=24h
-
-# Server
-PORT=5000
-NODE_ENV=development
-
-# Google Drive (for photo uploads)
-GOOGLE_DRIVE_FOLDER_ID=your-folder-id
-```
-
-### CORS Configuration
-
-Allowed origins are configured in `app.js`:
-
-**Development:**
-- http://localhost:5000
-- http://127.0.0.1:5000
-
-**Production:**
-- https://nikhilaodishapandarasamaja.in
-- https://www.nikhilaodishapandarasamaja.in
-- https://pandara-samaja-backend.onrender.com
-
-## 🔐 Authentication
-
-### Default Admin Account
-
-There is **no default admin account**. For a fresh deployment, create the first super_admin using:
-
-```bash
-ADMIN_USERNAME=yourname ADMIN_PASSWORD=<strong-12-char-password> node scripts/create-first-admin.js
-```
-
-> ⚠️ **Never** commit credentials to source control. This script reads passwords from environment variables only.
-
-### Using Protected Endpoints
-
-1. **Login to get token:**
-```javascript
-const response = await fetch('http://localhost:5000/api/v1/auth/login', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ username: 'admin', password: 'YOUR_PASSWORD' })
-});
-const { token } = await response.json();
-```
-
-2. **Use token in requests:**
-```javascript
-const response = await fetch('http://localhost:5000/api/candidates', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(candidateData)
-});
-```
+---
 
 ## 📁 Project Structure
 
 ```
-.
-├── app.js                      # Main application entry point
-├── package.json                # Dependencies and scripts
-├── .env.example                # Environment variables template
-├── README.md                   # This file
-├── SETUP.md                    # Detailed setup guide
-├── API_REFERENCE.md            # API documentation
-├── CHANGELOG.md                # Version history
+Pandara_samaja_backend/
+├── server.js               # Entry point — HTTP + Socket.io server
+├── app.js                  # Express app setup, middleware, route mounting
+├── render.yaml             # Render deployment config
+│
 ├── config/
-│   ├── db.js                  # PostgreSQL connection pool
-│   └── googleDrive.js         # Google Drive upload utility
+│   ├── db.js               # PostgreSQL connection pool (pg)
+│   ├── googleDrive.js      # Google Drive upload utility + FOLDER_MAP
+│   └── firebase.js         # Firebase Admin SDK setup
+│
+├── controllers/            # Route handler functions
+│   ├── memberController.js
+│   ├── leaderController.js
+│   ├── matrimonyApplicationController.js
+│   ├── candidateController.js
+│   ├── blogController.js
+│   ├── portalController.js
+│   └── auditLogController.js
+│
+├── routes/                 # Express routers
+│   ├── memberRoutes.js
+│   ├── leaderRoutes.js
+│   ├── matrimonyRoutes.js
+│   ├── imageProxyRoutes.js # Google Drive image proxy with CDN caching
+│   └── ...
+│
 ├── middleware/
-│   └── auth.js                # JWT authentication middleware
-├── routes/
-│   ├── authRoutes.js         # Authentication endpoints
-│   ├── candidateRoutes.js    # Matrimony candidates
-│   ├── memberRoutes.js       # Member management
-│   └── blogRoutes.js         # Blog posts
-├── controllers/
-│   ├── authController.js     # Authentication logic
-│   ├── candidateController.js # Candidate CRUD operations
-│   ├── memberController.js   # Member import/export
-│   └── blogController.js     # Post CRUD operations
-├── models/
-│   ├── userModel.js          # User database operations
-│   ├── candidateModel.js     # Candidate queries
-│   ├── memberModel.js        # Member queries
-│   └── blogModel.js          # Post queries
-└── schema/
-    └── users.sql             # Users table schema
+│   ├── auth.js             # JWT verification middleware
+│   ├── adminAuth.js        # Admin/Super-admin role guard
+│   └── rateLimiter.js      # Express rate limiting
+│
+├── migrations/             # node-pg-migrate SQL migrations
+├── models/                 # DB query helpers (pure SQL, no ORM)
+├── validators/             # Zod request validators
+├── utils/                  # Shared utility functions
+└── tests/                  # Node built-in test runner tests
 ```
-
-## 🧪 Testing
-
-### Test Authentication
-```bash
-# Login
-curl -X POST http://localhost:5000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
-
-# Save the token from the response, then:
-export TOKEN="your-jwt-token-here"
-
-# Test protected endpoint
-curl -X POST http://localhost:5000/api/posts \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"Test","content":"Test post"}'
-```
-
-### Test Public Endpoints
-```bash
-# Get all candidates
-curl http://localhost:5000/api/candidates
-
-# Get posts
-curl http://localhost:5000/api/posts
-
-# Export members
-curl http://localhost:5000/api/members/export -o members.xlsx
-```
-
-## 🛡️ Security Features
-
-- ✅ JWT token-based authentication
-- ✅ Password hashing with bcryptjs
-- ✅ Protected admin endpoints
-- ✅ Token expiration (24h default)
-- ✅ CORS configuration
-- ✅ Input validation
-- ✅ SQL injection protection (parameterized queries)
-
-## 📦 Dependencies
-
-### Production
-- **express** - Web framework
-- **pg** - PostgreSQL client
-- **jsonwebtoken** - JWT authentication
-- **bcryptjs** - Password hashing
-- **cors** - CORS middleware
-- **multer** - File uploads
-- **exceljs** - Excel file handling
-- **googleapis** - Google Drive integration
-- **dotenv** - Environment variables
-
-### Development
-- **nodemon** - Auto-reload during development
-
-## 🚢 Deployment
-
-### Deploy to Render
-
-1. **Set environment variables in Render dashboard:**
-   - `DATABASE_URL`
-   - `JWT_SECRET`
-   - `NODE_ENV=production`
-   - `GOOGLE_DRIVE_FOLDER_ID`
-
-2. **Run database migration:**
-```bash
-psql $DATABASE_URL -f schema/users.sql
-```
-
-3. **Deploy:**
-```bash
-git push
-```
-
-### Deploy to Other Platforms
-
-See [SETUP.md](SETUP.md) for platform-specific instructions.
-
-## 🐛 Troubleshooting
-
-### "No token provided" Error
-- Ensure Authorization header format: `Bearer <token>`
-- Check that token is being sent with request
-
-### "Token has expired" Error
-- Login again to get new token
-- Adjust `JWT_EXPIRES_IN` in .env if needed
-
-### Database Connection Error
-- Verify `DATABASE_URL` in .env
-- Check PostgreSQL is running
-- Verify network connectivity
-
-### CORS Error
-- Add your frontend domain to allowed origins in `app.js`
-- Check that origin header matches exactly
-
-## 📝 API Response Formats
-
-### Success Response
-```json
-{
-  "id": 1,
-  "title": "Sample Post",
-  "content": "Content here...",
-  "created_at": "2025-01-15T10:30:00Z"
-}
-```
-
-### Error Response
-```json
-{
-  "success": false,
-  "message": "Error description"
-}
-```
-
-or
-
-```json
-{
-  "error": "Error description"
-}
-```
-
-## 🤝 Contributing
-
-1. Create a feature branch
-2. Make your changes
-3. Test thoroughly
-4. Submit a pull request
-
-## 📄 License
-
-ISC
-
-## 🔗 Related Projects
-
-- **Frontend Repository:** [Pandara Samaja Frontend](https://github.com/your-org/pandara-samaja-frontend)
-- **Live Site:** [https://nikhilaodishapandarasamaja.in](https://nikhilaodishapandarasamaja.in)
-
-## 📞 Support
-
-For issues or questions:
-1. Check the documentation files
-2. Review server logs
-3. Verify environment configuration
-4. Open an issue on GitHub
 
 ---
 
-Made with ❤️ for Nikhila Odisha Pandara Samaja
+## 🚀 Key Features
+
+- **🔐 Authentication** — Firebase Phone OTP (members) + JWT with TOTP/MFA (admins)
+- **👥 Member Management** — Registration, approval workflow, HOF (Head of Family) model, Excel export
+- **🏛️ Leaders Directory** — Hierarchical (State → District → Taluka → Panchayat) with image uploads
+- **💍 Matrimony Module** — Form submission, admin review queue, candidate publishing
+- **📰 Blog & Posts** — Rich content with Google Drive media
+- **📡 Real-time** — Socket.io for notifications, messaging, and live feed updates
+- **🖼️ Image Proxy** — Server-side Google Drive proxy with ETag, 1-year immutable caching
+- **📋 Audit Log** — Tracks member logins, actions, devices, and locations
+- **🔒 Security** — `helmet`, CORS, rate limiting, input validation via Zod
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Node.js ≥ 18 |
+| Framework | Express 5 |
+| Database | PostgreSQL (via `pg`) |
+| Migrations | node-pg-migrate |
+| Auth | Firebase Admin SDK + JWT (`jsonwebtoken`) |
+| File Storage | Google Drive API (`googleapis`) |
+| Image Processing | Sharp (WebP conversion + resize) |
+| Real-time | Socket.io |
+| Validation | Zod |
+| Security | Helmet, express-rate-limit, bcryptjs |
+| Email | Nodemailer |
+| MFA | Speakeasy (TOTP) + QRCode |
+| Exports | ExcelJS |
+| Linting | ESLint |
+| Testing | Node built-in test runner + Supertest |
+
+---
+
+## 🔧 Local Development
+
+### Prerequisites
+- Node.js ≥ 18
+- PostgreSQL running locally
+- Google Cloud project with Drive API enabled
+- Firebase project with Phone Auth enabled
+
+### 1. Clone and Install
+
+```bash
+git clone https://github.com/Ranjitbehera0034/Pandara_samaja_backend.git
+cd Pandara_samaja_backend
+npm install
+```
+
+### 2. Environment Variables
+
+Copy the example file and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | Secret key for signing JWT tokens |
+| `GOOGLE_CLIENT_ID` | Google OAuth2 client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth2 client secret |
+| `GOOGLE_REFRESH_TOKEN` | OAuth2 refresh token with Drive access |
+| `GOOGLE_REDIRECT_URI` | OAuth redirect URI (oauthplayground for dev) |
+| `DRIVE_FOLDER_ID` | Root Google Drive folder ID |
+| `FIREBASE_SERVICE_ACCOUNT` | Firebase Admin SDK JSON (base64 encoded) |
+| `PORT` | Server port (default: `5000`) |
+
+### 3. Run Migrations
+
+```bash
+npm run migrate up
+```
+
+### 4. Start Development Server
+
+```bash
+npm run dev      # nodemon — auto-restarts on file changes
+```
+
+The server starts at `http://localhost:5000`.
+
+---
+
+## 📡 API Overview
+
+All routes are prefixed with `/api/v1`.
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `POST` | `/auth/login` | Admin login |
+| `GET` | `/members` | List all members |
+| `POST` | `/members` | Register new member |
+| `GET` | `/leaders` | Get leaders (filterable by level/location) |
+| `GET` | `/leaders/locations` | Get distinct locations for a level |
+| `POST` | `/leaders` | Create new leader (with image) |
+| `GET` | `/candidates` | List approved matrimony candidates |
+| `POST` | `/candidates` | Create candidate (admin direct upload) |
+| `GET` | `/admin/matrimony-forms` | Get matrimony review queue |
+| `PATCH` | `/admin/matrimony-forms/:id/review` | Approve / reject / correction |
+| `GET` | `/image-proxy/:fileId` | Proxy Google Drive image with caching |
+| `GET` | `/blogs` | List blog posts |
+| `GET` | `/portal/feed` | Community feed |
+| `GET` | `/audit-logs` | User activity audit log (admin only) |
+
+---
+
+## 🖼️ Google Drive Folder Structure
+
+```
+📁 Pandara_Samaja/             ← DRIVE_FOLDER_ID (root)
+│
+├── 📁 leaders/                ← Leader profile photos
+├── 📁 members/                ← Member profile photos
+├── 📁 gallery/                ← Community feed images
+├── 📁 matrimony/
+│   ├── 📁 photos/             ← Matrimony candidate photos
+│   └── 📁 forms/              ← Uploaded matrimony form PDFs
+└── 📁 posts/                  ← Blog/announcement cover images
+```
+
+Folder IDs are defined in `config/googleDrive.js` under `FOLDER_MAP`.
+
+---
+
+## 🚢 Deployment (Render)
+
+The app is deployed on [Render](https://render.com) using `render.yaml`.
+
+```bash
+# Production start command
+npm start    # node server.js
+```
+
+Environment variables are set via the Render dashboard (not committed to source).
+
+---
+
+## 🧪 Running Tests
+
+```bash
+npm test     # node --test tests/*.test.js
+```
+
+---
+
+## 📄 License
+
+MIT © Nikhila Odisha Pandara Samaja
