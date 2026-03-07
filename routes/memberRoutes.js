@@ -28,6 +28,7 @@ router.put('/:id', requireAuth, validate({ body: memberSchema }), memberControll
 router.delete('/:id', requireAuth, memberController.delete);
 
 // Public routes (must be last to avoid conflict with specific paths)
+router.get('/filters', optionalAuth, cache('30 minutes'), memberController.getMemberFilterOptions);
 router.get('/:id', optionalAuth, memberController.getOne);
 
 module.exports = router;

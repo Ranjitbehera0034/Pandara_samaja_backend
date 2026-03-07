@@ -31,20 +31,18 @@ exports.getAll = async (req, res) => {
   const limit = parseInt(req.query.limit) || 20;
   const offset = (page - 1) * limit;
 
-  // Check if search query parameter exists
-  if (req.query.search) {
-    const data = await model.search(req.query.search, limit, offset);
-    const rows = maskRows(data.rows, ['admin', 'super_admin'].includes(req.user?.role));
-    // Count for search is complex; for now just returning the masked rows
-    return res.json({
-      success: true,
-      rows: rows,
-      members: rows
-    });
-  }
+  const filters = {
+    search: req.query.search,
+    district: req.query.district,
+    taluka: req.query.taluka,
+    panchayat: req.query.panchayat,
+    gender: req.query.gender,
+    has_photo: req.query.has_photo,
+    has_aadhar: req.query.has_aadhar
+  };
 
-  const data = await model.getAll(limit, offset);
-  const totalItems = await model.getTotalCount();
+  const data = await model.getFiltered(limit, offset, filters);
+  const totalItems = await model.getFilteredCount(filters);
   const rows = maskRows(data.rows, ['admin', 'super_admin'].includes(req.user?.role));
 
   res.json({
@@ -59,6 +57,19 @@ exports.getAll = async (req, res) => {
     }
   });
 };
+
+/**
+ * Returns distinct districts, talukas, and panchayats for filter dropdowns
+ */
+exports.getMemberFilterOptions = async (req, res, next) => {
+  try {
+    const filters = await model.getMemberFilterOptions();
+    res.json({ success: true, filters });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.getByLocation = async (req, res) => {
   const {
     district,
