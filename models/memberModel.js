@@ -198,7 +198,16 @@ exports.getFiltered = async (limit = 20, offset = 0, filters = {}) => {
     conditions.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm WHERE fm->>'marital_status' = $${params.length})`);
   }
   if (filters.eligible_for_marriage === 'true') {
-    conditions.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm WHERE fm->>'marital_status' = 'Unmarried' AND fm->>'age' ~ '^[0-9]+$' AND CAST(fm->>'age' AS INTEGER) >= 21)`);
+    // Gender-aware eligibility: 18+ for Female, 21+ for Male
+    conditions.push(`EXISTS (
+      SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm 
+      WHERE fm->>'marital_status' = 'Unmarried' 
+      AND fm->>'age' ~ '^[0-9]+$' 
+      AND (
+        (LOWER(fm->>'gender') = 'female' AND CAST(fm->>'age' AS INTEGER) >= 18) OR 
+        (LOWER(fm->>'gender') != 'female' AND CAST(fm->>'age' AS INTEGER) >= 21)
+      )
+    )`);
   }
   if (filters.children_count !== undefined && filters.children_count !== '') {
     params.push(parseInt(filters.children_count, 10));
@@ -258,7 +267,16 @@ exports.getFilteredCount = async (filters = {}) => {
     conditions.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm WHERE fm->>'marital_status' = $${params.length})`);
   }
   if (filters.eligible_for_marriage === 'true') {
-    conditions.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm WHERE fm->>'marital_status' = 'Unmarried' AND fm->>'age' ~ '^[0-9]+$' AND CAST(fm->>'age' AS INTEGER) >= 21)`);
+    // Gender-aware eligibility: 18+ for Female, 21+ for Male
+    conditions.push(`EXISTS (
+      SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm 
+      WHERE fm->>'marital_status' = 'Unmarried' 
+      AND fm->>'age' ~ '^[0-9]+$' 
+      AND (
+        (LOWER(fm->>'gender') = 'female' AND CAST(fm->>'age' AS INTEGER) >= 18) OR 
+        (LOWER(fm->>'gender') != 'female' AND CAST(fm->>'age' AS INTEGER) >= 21)
+      )
+    )`);
   }
   if (filters.children_count !== undefined && filters.children_count !== '') {
     params.push(parseInt(filters.children_count, 10));
