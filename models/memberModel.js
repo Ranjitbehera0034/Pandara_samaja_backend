@@ -308,17 +308,17 @@ exports.getDemographicsStats = async (filters = {}) => {
 
   const wherePart = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  // Try using created_at if it exists, fallback if column missing
+  // Try using created_at if it exists
   const query = `
     SELECT 
       COALESCE(SUM(male), 0) as total_male,
       COALESCE(SUM(female), 0) as total_female,
-      -- Male Increases
+      -- Male Increases (Based on registration date)
       COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE THEN male ELSE 0 END), 0) as male_today,
       COALESCE(SUM(CASE WHEN created_at >= date_trunc('week', CURRENT_DATE) THEN male ELSE 0 END), 0) as male_week,
       COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', CURRENT_DATE) THEN male ELSE 0 END), 0) as male_month,
       COALESCE(SUM(CASE WHEN created_at >= date_trunc('year', CURRENT_DATE) THEN male ELSE 0 END), 0) as male_year,
-      -- Female Increases
+      -- Female Increases (Based on registration date)
       COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE THEN female ELSE 0 END), 0) as female_today,
       COALESCE(SUM(CASE WHEN created_at >= date_trunc('week', CURRENT_DATE) THEN female ELSE 0 END), 0) as female_week,
       COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', CURRENT_DATE) THEN female ELSE 0 END), 0) as female_month,
@@ -330,18 +330,15 @@ exports.getDemographicsStats = async (filters = {}) => {
     const res = await pool.query(query, params);
     return res.rows[0];
   } catch (error) {
-    if (error.code === '42703') { // undefined_column for created_at
-      const fallbackQuery = `
-        SELECT 
-          COALESCE(SUM(male), 0) as total_male,
-          COALESCE(SUM(female), 0) as total_female,
-          0 as male_today, 0 as male_week, 0 as male_month, 0 as male_year,
-          0 as female_today, 0 as female_week, 0 as female_month, 0 as female_year
-        FROM members
-        ${wherePart}
-      `;
-      const fallbackRes = await pool.query(fallbackQuery, params);
-      return fallbackRes.rows[0];
+    console.error('Demographics Stats Query Error:', error.message);
+    // If it's a missing column, try a very basic fallback
+    if (error.code === '42703') {
+      const basicRes = await pool.query(`SELECT COALESCE(SUM(male), 0) as total_male, COALESCE(SUM(female), 0) as total_female FROM members ${wherePart}`, params);
+      return {
+        ...basicRes.rows[0],
+        male_today: 0, male_week: 0, male_month: 0, male_year: 0,
+        female_today: 0, female_week: 0, female_month: 0, female_year: 0
+      };
     }
     throw error;
   }
@@ -528,7 +525,8 @@ exports.bulkUpsertMembers = async (rows) => {
             family_members = EXCLUDED.family_members::jsonb,
             address        = EXCLUDED.address,
             state          = EXCLUDED.state,
-            profile_photo_url = EXCLUDED.profile_photo_url;
+            profile_photo_url = EXCLUDED.profile_photo_url,
+            updated_at     = CURRENT_TIMESTAMP;
     `, vals);
 
     await client.query(sql);

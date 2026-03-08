@@ -2,9 +2,18 @@ const model = require('../models/memberModel');
 const ExcelJS = require('exceljs');
 const fs = require('node:fs/promises');
 
-// Helper: mask result rows (disabled as per user request to show full data)
-const maskRows = (rows, isAdmin) => {
-  return rows;
+// Helper: mask result rows for unauthenticated users
+const maskRows = (rows, isAuthenticated) => {
+  if (isAuthenticated) return rows;
+  return rows.map(r => {
+    const masked = { ...r };
+    if (masked.mobile && masked.mobile.length >= 4) {
+      masked.mobile = '*'.repeat(masked.mobile.length - 4) + masked.mobile.slice(-4);
+    } else if (masked.mobile) {
+      masked.mobile = '****';
+    }
+    return masked;
+  });
 };
 
 /**
@@ -46,7 +55,7 @@ exports.getAll = async (req, res) => {
 
   const data = await model.getFiltered(limit, offset, filters);
   const totalItems = await model.getFilteredCount(filters);
-  const rows = maskRows(data.rows, ['admin', 'super_admin'].includes(req.user?.role));
+  const rows = maskRows(data.rows, req.user != null);
 
   res.json({
     success: true,
@@ -95,14 +104,14 @@ exports.getByLocation = async (req, res) => {
     panchayat
   } = req.query;
   const data = await model.getAllByLocation(district, taluka, panchayat);
-  res.json(maskRows(data.rows, ['admin', 'super_admin'].includes(req.user?.role)));
+  res.json(maskRows(data.rows, req.user != null));
 };
 exports.search = async (req, res) => {
   const {
     keyword
   } = req.query;
   const data = await model.search(keyword);
-  res.json(maskRows(data.rows, ['admin', 'super_admin'].includes(req.user?.role)));
+  res.json(maskRows(data.rows, req.user != null));
 };
 exports.getOne = async (req, res, next) => {
   try {
@@ -113,11 +122,14 @@ exports.getOne = async (req, res, next) => {
       });
     }
 
-    // Masking removed so users can see full details
-    // if (!['admin', 'super_admin'].includes(req.user?.role)) {
-    //   member.mobile = member.mobile;
-    //   member.aadhar_no = member.aadhar_no;
-    // }
+    // Mask mobile if not authenticated
+    if (!req.user && member.mobile) {
+      if (member.mobile.length >= 4) {
+        member.mobile = '*'.repeat(member.mobile.length - 4) + member.mobile.slice(-4);
+      } else {
+        member.mobile = '****';
+      }
+    }
     res.json(member);
   } catch (error) {
     next(error);
