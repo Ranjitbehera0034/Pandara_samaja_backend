@@ -38,7 +38,10 @@ exports.getAll = async (req, res) => {
     panchayat: req.query.panchayat,
     gender: req.query.gender,
     has_photo: req.query.has_photo,
-    has_aadhar: req.query.has_aadhar
+    has_aadhar: req.query.has_aadhar,
+    marital_status: req.query.marital_status,
+    eligible_for_marriage: req.query.eligible_for_marriage,
+    children_count: req.query.children_count
   };
 
   const data = await model.getFiltered(limit, offset, filters);
@@ -56,6 +59,21 @@ exports.getAll = async (req, res) => {
       limit
     }
   });
+};
+
+exports.getDemographicsStats = async (req, res, next) => {
+  try {
+    const filters = {
+      district: req.query.district,
+      taluka: req.query.taluka,
+      panchayat: req.query.panchayat
+    };
+    const stats = await model.getDemographicsStats(filters);
+    res.json({ success: true, stats });
+  } catch (error) {
+    console.error('Error fetching demographics stats:', error);
+    next(error);
+  }
 };
 
 /**

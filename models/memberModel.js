@@ -193,6 +193,26 @@ exports.getFiltered = async (limit = 20, offset = 0, filters = {}) => {
   } else if (filters.has_aadhar === 'false') {
     conditions.push(`COALESCE(trim(aadhar_no), '') = ''`);
   }
+  if (filters.marital_status) {
+    params.push(filters.marital_status);
+    conditions.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm WHERE fm->>'marital_status' = $${params.length})`);
+  }
+  if (filters.eligible_for_marriage === 'true') {
+    // Gender-aware eligibility: 18+ for Female, 21+ for Male
+    conditions.push(`EXISTS (
+      SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm 
+      WHERE fm->>'marital_status' = 'Unmarried' 
+      AND fm->>'age' ~ '^[0-9]+$' 
+      AND (
+        (LOWER(fm->>'gender') = 'female' AND CAST(fm->>'age' AS INTEGER) >= 18) OR 
+        (LOWER(fm->>'gender') != 'female' AND CAST(fm->>'age' AS INTEGER) >= 21)
+      )
+    )`);
+  }
+  if (filters.children_count !== undefined && filters.children_count !== '') {
+    params.push(parseInt(filters.children_count, 10));
+    conditions.push(`(SELECT COUNT(*) FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm WHERE LOWER(fm->>'relation') IN ('son', 'daughter')) = $${params.length}`);
+  }
 
   const wherePart = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const query = `SELECT * FROM members ${wherePart} ORDER BY district, taluka, panchayat, name LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
@@ -242,10 +262,89 @@ exports.getFilteredCount = async (filters = {}) => {
   } else if (filters.has_aadhar === 'false') {
     conditions.push(`COALESCE(trim(aadhar_no), '') = ''`);
   }
+  if (filters.marital_status) {
+    params.push(filters.marital_status);
+    conditions.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm WHERE fm->>'marital_status' = $${params.length})`);
+  }
+  if (filters.eligible_for_marriage === 'true') {
+    // Gender-aware eligibility: 18+ for Female, 21+ for Male
+    conditions.push(`EXISTS (
+      SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm 
+      WHERE fm->>'marital_status' = 'Unmarried' 
+      AND fm->>'age' ~ '^[0-9]+$' 
+      AND (
+        (LOWER(fm->>'gender') = 'female' AND CAST(fm->>'age' AS INTEGER) >= 18) OR 
+        (LOWER(fm->>'gender') != 'female' AND CAST(fm->>'age' AS INTEGER) >= 21)
+      )
+    )`);
+  }
+  if (filters.children_count !== undefined && filters.children_count !== '') {
+    params.push(parseInt(filters.children_count, 10));
+    conditions.push(`(SELECT COUNT(*) FROM jsonb_array_elements(CASE WHEN jsonb_typeof(family_members) = 'array' THEN family_members ELSE '[]'::jsonb END) as fm WHERE LOWER(fm->>'relation') IN ('son', 'daughter')) = $${params.length}`);
+  }
 
   const wherePart = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const res = await pool.query(`SELECT COUNT(*) FROM members ${wherePart}`, params);
   return parseInt(res.rows[0].count, 10);
+};
+
+exports.getDemographicsStats = async (filters = {}) => {
+  const { district, taluka, panchayat } = filters;
+  const params = [];
+  let conditions = ["(is_banned IS NULL OR is_banned = false)"];
+
+  if (district) {
+    params.push(district);
+    conditions.push(`district = $${params.length}`);
+  }
+  if (taluka) {
+    params.push(taluka);
+    conditions.push(`taluka = $${params.length}`);
+  }
+  if (panchayat) {
+    params.push(panchayat);
+    conditions.push(`panchayat = $${params.length}`);
+  }
+
+  const wherePart = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  // Try using created_at if it exists, fallback if column missing
+  const query = `
+    SELECT 
+      COALESCE(SUM(male), 0) as total_male,
+      COALESCE(SUM(female), 0) as total_female,
+      -- Male Increases
+      COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE THEN male ELSE 0 END), 0) as male_today,
+      COALESCE(SUM(CASE WHEN created_at >= date_trunc('week', CURRENT_DATE) THEN male ELSE 0 END), 0) as male_week,
+      COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', CURRENT_DATE) THEN male ELSE 0 END), 0) as male_month,
+      COALESCE(SUM(CASE WHEN created_at >= date_trunc('year', CURRENT_DATE) THEN male ELSE 0 END), 0) as male_year,
+      -- Female Increases
+      COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE THEN female ELSE 0 END), 0) as female_today,
+      COALESCE(SUM(CASE WHEN created_at >= date_trunc('week', CURRENT_DATE) THEN female ELSE 0 END), 0) as female_week,
+      COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', CURRENT_DATE) THEN female ELSE 0 END), 0) as female_month,
+      COALESCE(SUM(CASE WHEN created_at >= date_trunc('year', CURRENT_DATE) THEN female ELSE 0 END), 0) as female_year
+    FROM members
+    ${wherePart}
+  `;
+  try {
+    const res = await pool.query(query, params);
+    return res.rows[0];
+  } catch (error) {
+    if (error.code === '42703') { // undefined_column for created_at
+      const fallbackQuery = `
+        SELECT 
+          COALESCE(SUM(male), 0) as total_male,
+          COALESCE(SUM(female), 0) as total_female,
+          0 as male_today, 0 as male_week, 0 as male_month, 0 as male_year,
+          0 as female_today, 0 as female_week, 0 as female_month, 0 as female_year
+        FROM members
+        ${wherePart}
+      `;
+      const fallbackRes = await pool.query(fallbackQuery, params);
+      return fallbackRes.rows[0];
+    }
+    throw error;
+  }
 };
 
 exports.getOne = async (id) => {
