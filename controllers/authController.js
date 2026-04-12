@@ -14,6 +14,63 @@ if (!JWT_SECRET) {
 }
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 class AuthController {
+  // Helper for Single Sign-On (SSO) to Portal
+  static async _generatePortalData(dbUser) {
+      if (!dbUser.membership_no) {
+          if (dbUser.role === 'admin' || dbUser.role === 'super_admin') {
+              // Synthetic God-Mode token for Super Admins who lack a membership number
+              const portalToken = jwt.sign(
+                  {
+                      membership_no: 'SYSTEM_ADMIN',
+                      name: 'System Administrator',
+                      mobile: '9999999999',
+                      relation: 'Self/Head',
+                      type: 'member_portal'
+                  },
+                  JWT_SECRET,
+                  { expiresIn: '7d' }
+              );
+              return {
+                  token: portalToken,
+                  member: { 
+                     membership_no: 'SYSTEM_ADMIN', name: 'System Administrator', mobile: '9999999999',
+                     district: 'Hq', taluka: 'Hq', panchayat: 'Hq', village: 'Hq', address: 'Hq',
+                     head_gender: 'Male', profile_photo_url: null, aadhar_no: null, family_members: []
+                  },
+                  loggedInUser: { name: 'System Administrator', mobile: '9999999999', relation: 'Self/Head' }
+              };
+          }
+          return null;
+      }
+      try {
+          const portalModel = require('../models/portalModel');
+          const member = await portalModel.getMemberProfile(dbUser.membership_no);
+          if (!member) return null;
+
+          const cleanMobile = (member.mobile || '').replace(/\D/g, '');
+          const portalToken = jwt.sign(
+              {
+                  membership_no: member.membership_no,
+                  name: member.name,
+                  mobile: cleanMobile,
+                  relation: 'Self/Head',
+                  type: 'member_portal'
+              },
+              JWT_SECRET,
+              { expiresIn: '7d' }
+          );
+
+          return {
+              token: portalToken,
+              member: { ...member, profile_photo_url: null, aadhar_no: null },
+              loggedInUser: { name: member.name, mobile: cleanMobile, relation: 'Self/Head' }
+          };
+      } catch (e) {
+          console.error('Portal SSO error:', e);
+          return null;
+      }
+  }
+
   // Login
   static async login(req, res, next) {
     try {
@@ -101,11 +158,15 @@ class AuthController {
         expiresIn: JWT_EXPIRES_IN
       });
 
+      // Generate SSO Portal Token
+      const portalData = await AuthController._generatePortalData(user);
+
       // Return success response
       res.json({
         success: true,
         message: 'Login successful',
         token,
+        portalData,
         user: {
           id: user.id,
           username: user.username,
@@ -373,10 +434,14 @@ class AuthController {
         }, JWT_SECRET, {
           expiresIn: JWT_EXPIRES_IN
         });
+        // Generate SSO Portal Token
+        const portalData = await AuthController._generatePortalData(dbUser);
+
         return res.json({
           success: true,
           message: 'MFA Verified, Login successful',
           token,
+          portalData,
           user: {
             id: dbUser.id,
             username: dbUser.username,
