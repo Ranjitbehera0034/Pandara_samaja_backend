@@ -25,6 +25,8 @@ const allowedOrigins = [
   'http://127.0.0.1:8080',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
   'http://localhost:4173',
   'http://127.0.0.1:4173',
   'https://nikhilaodishapandarasamaja.in',
@@ -41,7 +43,8 @@ app.use(
       const regex = /^https?:\/\/(?:.+\.)?nikhilaodishapandarasamaja\.in$/i;
       if (regex.test(origin)) return cb(null, true);
       return cb(new Error('Not allowed by CORS: ' + origin));
-    }
+    },
+    credentials: true
   })
 );
 
