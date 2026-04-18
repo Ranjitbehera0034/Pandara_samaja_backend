@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const portalCtrl = require('../controllers/portalController');
 const { requirePortalAuth } = require('../middleware/portalAuth');
+const { requireAnyAuth } = require('../middleware/anyAuth');
 const rateLimit = require('express-rate-limit');
 const validate = require('../middleware/validate');
 const { portalVerifyFirebaseSchema } = require('../validators/portalValidators');
@@ -41,6 +42,7 @@ module.exports = (upload) => {
     });
 
     // ── Protected routes (require member portal JWT) ──
+    router.get('/media', requireAnyAuth, portalCtrl.getSignedMediaUrl);
 
     // Profile
     router.get('/me', requirePortalAuth, portalCtrl.getProfile);

@@ -36,16 +36,26 @@ exports.create = async (req, res, next) => {
       title,
       content
     } = req.body;
+    
     let image_url = null;
-    if (req.file) {
-      image_url = await uploadToFirebase(req.file, UPLOAD_PATHS.BLOG_PHOTO());
+    let video_url = null;
+
+    if (req.files) {
+      if (req.files.image) {
+        image_url = await uploadToFirebase(req.files.image[0], UPLOAD_PATHS.BLOG_PHOTO());
+      }
+      if (req.files.video) {
+        video_url = await uploadToFirebase(req.files.video[0], UPLOAD_PATHS.BLOG_PHOTO());
+      }
     }
+
     const {
       rows
     } = await Post.create({
       title,
       content,
-      image_url
+      image_url,
+      video_url
     });
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -57,37 +67,37 @@ exports.update = async (req, res, next) => {
   try {
     const {
       title,
-      content
+      content,
+      removeImage,
+      removeVideo
     } = req.body;
 
-    // Check if an existing Image URL was passed
-    let image_url = req.body.existingImage || null;
-    if (req.file) {
-      image_url = await uploadToFirebase(req.file, UPLOAD_PATHS.BLOG_PHOTO());
-    } else if (!image_url) {
-      // If no file and no existing image passed, get existing row and keep its image unless they explicitly removed it
-      // Actually, if they didn't pass existingImage, see if they passed `removeImage=true`
-      if (req.body.removeImage !== 'true') {
-        const {
-          rows: existingRows
-        } = await Post.getOne(req.params.id);
-        if (existingRows.length > 0) {
-          image_url = existingRows[0].image_url;
-        }
+    const { rows: existingRows } = await Post.getOne(req.params.id);
+    if (existingRows.length === 0) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    const existing = existingRows[0];
+
+    let image_url = removeImage === 'true' ? null : (req.body.image_url || existing.image_url);
+    let video_url = removeVideo === 'true' ? null : (req.body.video_url || existing.video_url);
+
+    if (req.files) {
+      if (req.files.image) {
+        image_url = await uploadToFirebase(req.files.image[0], UPLOAD_PATHS.BLOG_PHOTO());
+      }
+      if (req.files.video) {
+        video_url = await uploadToFirebase(req.files.video[0], UPLOAD_PATHS.BLOG_PHOTO());
       }
     }
+
     const {
       rows
     } = await Post.update(req.params.id, {
       title,
       content,
-      image_url
+      image_url,
+      video_url
     });
-    if (rows.length === 0) {
-      return res.status(404).json({
-        error: 'Post not found'
-      });
-    }
     res.json(rows[0]);
   } catch (err) {
     console.error('Update Post Error:', err);

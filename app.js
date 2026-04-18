@@ -88,6 +88,7 @@ app.use('/api/v1/portal', require('./routes/portalRoutes')(upload));
 app.use('/api/v1/admin', require('./routes/adminRoutes'));
 app.use('/api/v1/admin/expenses', require('./routes/expenseRoutes'));
 app.use('/api/v1/leaders', require('./routes/leaderRoutes')(upload));
+app.use('/api/v1/reels', require('./routes/reelRoutes')(upload));
 app.use('/api/v1/webhooks', require('./routes/webhookRoutes'));
 
 // Image proxy — streams Google Drive images server-side to avoid 403 hotlink blocks

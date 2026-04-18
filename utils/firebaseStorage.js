@@ -15,7 +15,8 @@ const UPLOAD_PATHS = {
     MATRIMONY_CANDIDATE: (mobile) => `matrimony/candidates/${mobile}`,
     LEADER_PHOTO: (level) => `leaders/${level}`,
     BLOG_PHOTO: () => `blogs/${new Date().toISOString().split('T')[0]}`,
-    ADMIN_UPLOAD: (adminId, type) => `admins/${adminId}/${type}`
+    ADMIN_UPLOAD: (adminId, type) => `admins/${adminId}/${type}`,
+    REELS: (authorId) => `reels/${authorId}`
 };
 
 /**
@@ -33,15 +34,19 @@ async function uploadToFirebase(file, destinationPath) {
     let finalMimeType = file.mimetype;
     let finalExtension = path.extname(file.originalname);
 
-    // Image Optimization Pipeline
+    // Image Optimization Pipeline (only for images)
     if (file.mimetype.startsWith('image/') && !file.mimetype.includes('gif')) {
-        finalBuffer = await sharp(file.buffer)
-            .resize({ width: 1200, withoutEnlargement: true })
-            .webp({ quality: 80 })
-            .toBuffer();
-        
-        finalMimeType = 'image/webp';
-        finalExtension = '.webp';
+        try {
+            finalBuffer = await sharp(file.buffer)
+                .resize({ width: 1200, withoutEnlargement: true })
+                .webp({ quality: 80 })
+                .toBuffer();
+            
+            finalMimeType = 'image/webp';
+            finalExtension = '.webp';
+        } catch (err) {
+            console.warn('Sharp optimization failed, using original buffer:', err.message);
+        }
     }
 
     const fullPath = `${destinationPath}/${fileName}${finalExtension}`;
@@ -51,12 +56,13 @@ async function uploadToFirebase(file, destinationPath) {
         metadata: {
             contentType: finalMimeType,
         },
-        public: true // Automatically make it public for browser access
+        public: false // PRIVACY: Only accessible via signed URLs or Admin SDK
     });
 
-    // Construct the public URL
-    // Format: https://storage.googleapis.com/{bucket_name}/{file_path}
-    return `https://storage.googleapis.com/${bucket.name}/${fullPath}`;
+    // Construct a proxy URL that handles authentication and signed URL generation
+    // Format: /api/v1/portal/media?path={fullPath}
+    // This allows us to check session before redirecting to a signed URL
+    return `/api/v1/portal/media?path=${encodeURIComponent(fullPath)}`;
 }
 
 module.exports = {

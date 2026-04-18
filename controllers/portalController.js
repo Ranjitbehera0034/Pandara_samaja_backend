@@ -113,6 +113,49 @@ exports.loginWithFirebase = async (req, res, next) => {
     }
 };
 
+/**
+ * GET /api/v1/portal/media?path=...
+ * Authenticated proxy for private Firebase storage assets.
+ * Generates a signed URL valid for 1 hour and redirects the client.
+ */
+exports.getSignedMediaUrl = async (req, res) => {
+    try {
+        const { path: filePath } = req.query;
+
+        if (!filePath) {
+            return res.status(400).json({ success: false, message: 'Missing path parameter' });
+        }
+
+        // Basic security check - ensure path isn't trying to escape bucket
+        if (filePath.includes('..') || filePath.startsWith('/') || filePath.startsWith('http')) {
+            return res.status(403).json({ success: false, message: 'Invalid media path' });
+        }
+
+        const bucket = firebaseAdmin.storage().bucket();
+        const file = bucket.file(filePath);
+
+        // Check if file exists
+        const [exists] = await file.exists();
+        if (!exists) {
+            return res.status(404).json({ success: false, message: 'Media not found' });
+        }
+
+        // Generate a 1-hour signed URL
+        const [url] = await file.getSignedUrl({
+            action: 'read',
+            expires: Date.now() + 1000 * 60 * 60, // 60 minutes
+        });
+
+        // Redirect browser to the private signed URL
+        // Using 302 Found (temporary redirect)
+        res.redirect(url);
+
+    } catch (error) {
+        console.error('Media proxy error:', error);
+        res.status(500).json({ success: false, message: 'Failed to access media' });
+    }
+};
+
 
 // ═══════════════════════════════════════════════════
 //  PROFILE
@@ -323,6 +366,8 @@ exports.createPost = async (req, res) => {
             });
         }
 
+        const member = req.portalMember;
+
         // --- Banned Words Check ---
         if (text) {
             const activeBannedWords = await pool.query('SELECT word FROM banned_words');
@@ -335,18 +380,16 @@ exports.createPost = async (req, res) => {
             }
         }
 
-        // Upload images to Google Drive
-        const imageUrls = [];
+        // Upload media (images/videos)
+        const mediaUrls = [];
         for (const file of files) {
             try {
                 const url = await uploadToFirebase(file, UPLOAD_PATHS.MEMBER_POSTS(member.mobile));
-                imageUrls.push(url);
+                mediaUrls.push(url);
             } catch (uploadErr) {
-                console.error('Image upload error:', uploadErr);
+                console.error('Media upload error:', uploadErr);
             }
         }
-
-        const member = req.portalMember;
 
         // Fetch current individual photo
         const profileRes = await pool.query('SELECT profile_photo_url, family_members, mobile FROM members WHERE membership_no = $1', [member.membership_no]);
@@ -363,7 +406,7 @@ exports.createPost = async (req, res) => {
         const post = await portal.createPost({
             authorId: member.membership_no,
             textContent: text || null,
-            images: imageUrls,
+            images: mediaUrls, // database field is 'images' but stores all media
             location: member.panchayat || member.taluka || member.district || null,
             authorName: member.name, // passes family member identity
             authorPhoto: authorPhoto,
@@ -372,6 +415,13 @@ exports.createPost = async (req, res) => {
 
         // Return enriched post
         const enriched = await portal.getPost(post.id, member.membership_no);
+
+        // Ensure returned post media are proxied (in case some logic returned raw URLs)
+        if (enriched.images) {
+            enriched.images = enriched.images.map(url => 
+                url.includes('storage.googleapis.com') ? `/api/v1/portal/media?path=${encodeURIComponent(url.split('/').slice(4).join('/'))}` : url
+            );
+        }
 
         // Notify connected clients
         const io = req.app.get('io');
@@ -418,9 +468,19 @@ exports.getPosts = async (req, res) => {
             mobile: req.portalMember.mobile
         });
 
-        // For each post, fetch comments
+        // For each post, fetch comments and proxy media URLs
         for (const post of posts) {
             post.comments = await portal.getComments(post.id);
+            if (post.images && Array.isArray(post.images)) {
+                post.images = post.images.map(url => {
+                    // Convert old static Firebase URLs to proxy URLs for privacy
+                    if (url && typeof url === 'string' && url.includes('storage.googleapis.com')) {
+                        const pathMatch = url.split('/').slice(4).join('/');
+                        return `/api/v1/portal/media?path=${encodeURIComponent(pathMatch)}`;
+                    }
+                    return url;
+                });
+            }
         }
 
         res.json({ success: true, posts });

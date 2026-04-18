@@ -5,13 +5,13 @@ const { requireAuth } = require('../middleware/auth');
 module.exports = (upload) => {
     const router = express.Router();
 
-    // Public routes
-    router.get('/', postCtrl.getAll);
-    router.get('/:id', postCtrl.getOne);
+    // All routes are now protected to ensure community privacy
+    router.get('/', requireAuth, postCtrl.getAll);
+    router.get('/:id', requireAuth, postCtrl.getOne);
 
-    // Protected routes (require authentication)
-    router.post('/', requireAuth, upload.single('image'), postCtrl.create);
-    router.put('/:id', requireAuth, upload.single('image'), postCtrl.update);
+    // Write operations (require authentication)
+    router.post('/', requireAuth, upload.fields([{ name: 'image', maxCount: 1 }, { name: 'video', maxCount: 1 }]), postCtrl.create);
+    router.put('/:id', requireAuth, upload.fields([{ name: 'image', maxCount: 1 }, { name: 'video', maxCount: 1 }]), postCtrl.update);
     router.delete('/:id', requireAuth, postCtrl.remove);
 
     return router;
