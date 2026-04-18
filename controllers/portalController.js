@@ -115,8 +115,8 @@ exports.loginWithFirebase = async (req, res, next) => {
 
 /**
  * GET /api/v1/portal/media?path=...
- * Authenticated proxy for private Firebase storage assets.
- * Generates a signed URL valid for 1 hour and redirects the client.
+ * Proxy endpoint that serves media from private Firebase Storage.
+ * Supports HTTP Range requests for seamless video streaming/seeking.
  */
 exports.getSignedMediaUrl = async (req, res) => {
     try {
@@ -134,23 +134,52 @@ exports.getSignedMediaUrl = async (req, res) => {
         const bucket = firebaseAdmin.storage().bucket();
         const file = bucket.file(filePath);
 
-        // Check if file exists
-        const [exists] = await file.exists();
-        if (!exists) {
-            return res.status(404).json({ success: false, message: 'Media not found' });
+        // Fetch metadata to get size and content type
+        const [metadata] = await file.getMetadata();
+        const fileSize = parseInt(metadata.size);
+        const contentType = metadata.contentType || 'application/octet-stream';
+        
+        const range = req.headers.range;
+
+        if (range) {
+            // Handle Range Request (206 Partial Content)
+            // Format: "bytes=0-1024"
+            const parts = range.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+            if (start >= fileSize) {
+                return res.status(416).send('Requested range not satisfiable\n' + start + ' >= ' + fileSize);
+            }
+
+            const chunksize = (end - start) + 1;
+            const stream = file.createReadStream({ start, end });
+
+            res.writeHead(206, {
+                'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                'Accept-Ranges': 'bytes',
+                'Content-Length': chunksize,
+                'Content-Type': contentType,
+                'Cache-Control': 'public, max-age=3600'
+            });
+
+            stream.pipe(res);
+        } else {
+            // Handle Full Request (200 OK)
+            res.writeHead(200, {
+                'Content-Length': fileSize,
+                'Content-Type': contentType,
+                'Accept-Ranges': 'bytes',
+                'Cache-Control': 'public, max-age=3600'
+            });
+
+            file.createReadStream().pipe(res);
         }
 
-        // Generate a 1-hour signed URL
-        const [url] = await file.getSignedUrl({
-            action: 'read',
-            expires: Date.now() + 1000 * 60 * 60, // 60 minutes
-        });
-
-        // Redirect browser to the private signed URL
-        // Using 302 Found (temporary redirect)
-        res.redirect(url);
-
     } catch (error) {
+        if (error.code === 404) {
+            return res.status(404).json({ success: false, message: 'Media not found' });
+        }
         console.error('Media proxy error:', error);
         res.status(500).json({ success: false, message: 'Failed to access media' });
     }
