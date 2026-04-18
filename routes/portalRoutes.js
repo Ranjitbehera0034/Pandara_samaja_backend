@@ -21,8 +21,10 @@ const loginRateLimiter = rateLimit({
 module.exports = (upload) => {
 
     // ── Public routes (no auth) ──
+    const { verifyTurnstile } = require('../middleware/captchaMiddleware');
+    
     // Firebase verify token route
-    router.post('/login/firebase', loginRateLimiter, validate({ body: portalVerifyFirebaseSchema }), portalCtrl.loginWithFirebase);
+    router.post('/login/firebase', loginRateLimiter, verifyTurnstile, validate({ body: portalVerifyFirebaseSchema }), portalCtrl.loginWithFirebase);
 
     // ── Public: Downloadable Documents ──
     router.get('/documents/matrimony-form', async (req, res) => {

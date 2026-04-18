@@ -15,8 +15,10 @@ const loginLimiter = process.env.NODE_ENV === 'production' ? rateLimit({
     message: { success: false, message: 'Too many login attempts. Please try again in 15 minutes.' }
 }) : (req, res, next) => next();
 
+const { verifyTurnstile } = require('../middleware/captchaMiddleware');
+
 // Public routes
-router.post('/login', loginLimiter, validate({ body: adminLoginSchema }), AuthController.login);
+router.post('/login', loginLimiter, verifyTurnstile, validate({ body: adminLoginSchema }), AuthController.login);
 
 // Protected routes (Only Super Admin can register/manage users/admins)
 router.post('/register', requireAuthSuperAdmin, validate({ body: registerAdminSchema }), AuthController.register);
