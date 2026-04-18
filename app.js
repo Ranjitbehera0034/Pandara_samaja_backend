@@ -52,8 +52,26 @@ app.use(
 const helmet = require('helmet');
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
-  contentSecurityPolicy: false,
-  xFrameOptions: false
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://www.googletagmanager.com", "https://pagead2.googlesyndication.com", "https://challenges.cloudflare.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "https:", "https://firebasestorage.googleapis.com", "*.googleusercontent.com"],
+      connectSrc: ["'self'", "https://pandara-samaja-backend.onrender.com", "https://firestore.googleapis.com", "https://*.firebaseio.com", "https://www.google-analytics.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'", "https://firebasestorage.googleapis.com", "https://*.googlevideo.com", "https://*.youtube.com"],
+      frameSrc: ["'self'", "https://challenges.cloudflare.com", "https://www.youtube.com"],
+      upgradeInsecureRequests: [],
+    },
+  },
+  xFrameOptions: { action: "deny" },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
 }));
 
 const rateLimit = require('express-rate-limit');
@@ -65,7 +83,17 @@ const globalLimiter = rateLimit({
   message: { success: false, message: 'Too many requests from this IP, please try again after 15 minutes' }
 });
 
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // Max 10 login attempts per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts, please try again after 15 minutes' }
+});
+
 app.use('/api/v1/', globalLimiter);
+app.use('/api/v1/auth/login', loginLimiter);
+app.use('/api/v1/admin/login', loginLimiter);
 
 /* ─── 3. Body-parser & static ─────────────────────────────── */
 app.use(bodyParser.json({ limit: '5mb' }));

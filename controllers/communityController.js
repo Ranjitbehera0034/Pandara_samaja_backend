@@ -117,11 +117,10 @@ exports.getExploreStats = async (req, res, next) => {
 
 exports.getLiveStreams = async (req, res, next) => {
   try {
-    // Return mock or actual list of active streams (currently empty as it's an advanced feature)
-    // Frontend uses this payload structure, expanding this when WebRTC / Mediasoup is integrated.
+    const streams = await communityModel.getActiveLiveStreams();
     res.json({
       success: true,
-      streams: []
+      streams
     });
   } catch (e) {
     console.error('Get live streams error:', e);

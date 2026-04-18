@@ -106,3 +106,49 @@ exports.getExploreStats = async () => {
         trendingTags: ['#festival', '#community', '#puja']
     };
 };
+
+// ═══════════════════════════════════════════════════
+// LIVE STREAMS
+// ═══════════════════════════════════════════════════
+
+exports.getActiveLiveStreams = async () => {
+    const res = await pool.query(
+        `SELECT l.*, m.name as creator_name 
+         FROM portal_live_streams l 
+         LEFT JOIN members m ON l.created_by = m.membership_no 
+         WHERE is_active = true ORDER BY created_at DESC`
+    );
+    return res.rows;
+};
+
+exports.getAllLiveStreams = async () => {
+    const res = await pool.query(
+        `SELECT l.*, m.name as creator_name 
+         FROM portal_live_streams l 
+         LEFT JOIN members m ON l.created_by = m.membership_no 
+         ORDER BY l.created_at DESC`
+    );
+    return res.rows;
+};
+
+exports.createLiveStream = async (title, description, streamUrl, createdBy) => {
+    const res = await pool.query(
+        `INSERT INTO portal_live_streams (title, description, stream_url, created_by, is_active)
+         VALUES ($1, $2, $3, $4, true)
+         RETURNING *`,
+        [title, description, streamUrl, createdBy]
+    );
+    return res.rows[0];
+};
+
+exports.updateLiveStreamStatus = async (id, isActive) => {
+    const query = isActive 
+        ? `UPDATE portal_live_streams SET is_active = true, ended_at = NULL WHERE id = $1 RETURNING *`
+        : `UPDATE portal_live_streams SET is_active = false, ended_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`;
+    const res = await pool.query(query, [id]);
+    return res.rows[0];
+};
+
+exports.deleteLiveStream = async (id) => {
+    await pool.query(`DELETE FROM portal_live_streams WHERE id = $1`, [id]);
+};

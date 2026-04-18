@@ -210,6 +210,27 @@ io.on('connection', (socket) => {
   });
 
   // ─── Disconnect ───
+  // ─── Live Streams ───
+  socket.on('join_live_stream', ({ streamId }) => {
+    if (!streamId) return;
+    socket.join(`live_stream:${streamId}`);
+    console.log(`📡 Socket ${socket.id} joined live_stream:${streamId}`);
+  });
+
+  socket.on('live_message', async ({ streamId, content, senderName }) => {
+    if (!streamId || !content) return;
+    
+    // Broadcast message to everyone in the room
+    io.to(`live_stream:${streamId}`).emit('receive_live_message', {
+      id: Date.now().toString(),
+      text: content,
+      user: senderName || socket.decoded.name || 'Member',
+      userId: socket.decoded.membership_no || socket.decoded.id,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // ─── Disconnect ───
   socket.on('disconnect', () => {
     const userId = socket.userId;
     const userMobile = socket.userMobile;
