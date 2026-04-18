@@ -442,7 +442,7 @@ exports.createPost = async (req, res) => {
             'CREATE_POST',
             'Post',
             post.id,
-            { preview: (text || '').substring(0, 80), hasImages: imageUrls.length > 0 },
+            { preview: (text || '').substring(0, 80), hasImages: mediaUrls.length > 0 },
             req
         );
     } catch (error) {
