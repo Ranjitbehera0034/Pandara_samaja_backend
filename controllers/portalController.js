@@ -1,7 +1,7 @@
 // controllers/portalController.js — Member Portal API handlers
 const jwt = require('jsonwebtoken');
 const portal = require('../models/portalModel');
-const { uploadFile, FOLDER_MAP } = require('../config/googleDrive');
+const { uploadToFirebase, UPLOAD_PATHS } = require('../utils/firebaseStorage');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebase');
 const { logUserAction } = require('../utils/auditLogger');
@@ -258,7 +258,7 @@ exports.uploadProfilePhoto = async (req, res) => {
         }
 
         // Update specific family member profile photo
-        const url = await uploadFile(req.file, FOLDER_MAP.MEMBERS);
+        const url = await uploadToFirebase(req.file, UPLOAD_PATHS.MEMBER_PROFILE(req.portalMember.mobile));
         await portal.updateFamilyMemberPhoto(
             req.portalMember.membership_no,
             req.portalMember.mobile,
@@ -339,7 +339,7 @@ exports.createPost = async (req, res) => {
         const imageUrls = [];
         for (const file of files) {
             try {
-                const url = await uploadFile(file, FOLDER_MAP.GALLERY);
+                const url = await uploadToFirebase(file, UPLOAD_PATHS.MEMBER_POSTS(member.mobile));
                 imageUrls.push(url);
             } catch (uploadErr) {
                 console.error('Image upload error:', uploadErr);
@@ -792,7 +792,7 @@ exports.uploadPhotos = async (req, res) => {
 
         for (const file of files) {
             try {
-                const url = await uploadFile(file, FOLDER_MAP.GALLERY);
+                const url = await uploadToFirebase(file, UPLOAD_PATHS.MEMBER_GALLERY(req.portalMember.mobile));
                 const photo = await portal.addPhoto(
                     req.portalMember.membership_no,
                     url,

@@ -51,10 +51,20 @@ router.post('/maker-checker/:id/review', requireAuthSuperAdmin, adminController.
 router.post('/maker-checker/:id/undo', requireAuthSuperAdmin, adminController.undoAction);
 
 // --- Matrimony Form Upload Verification (New Workflow) ---
+// Matrimony Form Upload Verification
 const matrimonyAppCtrl = require('../controllers/matrimonyApplicationController');
 router.get('/matrimony-forms/stats', matrimonyAppCtrl.adminStats);
 router.get('/matrimony-forms', matrimonyAppCtrl.adminGetAll);
 router.get('/matrimony-forms/:id', matrimonyAppCtrl.adminGetOne);
 router.put('/matrimony-forms/:id/review', matrimonyAppCtrl.adminReview);
+
+// Document Management
+const docCtrl = require('../controllers/documentController');
+const multer = require('multer');
+const uploadDoc = multer({ storage: multer.memoryStorage() });
+
+router.get('/documents', docCtrl.getDocuments);
+router.post('/documents', uploadDoc.single('file'), docCtrl.addDocument);
+router.delete('/documents/:id', docCtrl.deleteDocument);
 
 module.exports = router;

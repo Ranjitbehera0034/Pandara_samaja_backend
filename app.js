@@ -71,13 +71,8 @@ app.use('/api/v1/', globalLimiter);
 app.use(bodyParser.json({ limit: '5mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
 
-// DASHBOARD TOOLS (super-admin protected)
-const path = require('path');
-const { requireAuthSuperAdmin } = require('./middleware/auth');
-app.use('/tools', requireAuthSuperAdmin, express.static(path.join(__dirname, 'public')));
-app.get('/dashboard-demo', requireAuthSuperAdmin, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'super-dashboard.html'));
-});
+// Removed legacy dashboard tools (Transitioned to React Admin App)
+
 
 /* ─── 4. Upload folder + multer ───────────────────────────── */
 const upload = multer({ storage: multer.memoryStorage() });
@@ -91,6 +86,7 @@ app.use('/api/v1/members', require('./routes/memberRoutes'));
 app.use('/api/v1/posts', require('./routes/blogRoutes')(upload));
 app.use('/api/v1/portal', require('./routes/portalRoutes')(upload));
 app.use('/api/v1/admin', require('./routes/adminRoutes'));
+app.use('/api/v1/admin/expenses', require('./routes/expenseRoutes'));
 app.use('/api/v1/leaders', require('./routes/leaderRoutes')(upload));
 app.use('/api/v1/webhooks', require('./routes/webhookRoutes'));
 

@@ -171,6 +171,53 @@ exports.getDashboardStats = async (req, res, next) => {
     // Moderation queue
     const reportsReq = await pool.query("SELECT COUNT(*) FROM portal_reports");
     stats.reportsPending = parseInt(reportsReq.rows[0].count);
+
+    // Expenses summary
+    const totalExpensesReq = await pool.query("SELECT SUM(amount) FROM expenses");
+    const monthExpensesReq = await pool.query("SELECT SUM(amount) FROM expenses WHERE expense_date >= DATE_TRUNC('month', CURRENT_DATE)");
+    stats.totalExpenses = parseFloat(totalExpensesReq.rows[0].sum || 0);
+    stats.monthExpenses = parseFloat(monthExpensesReq.rows[0].sum || 0);
+
+    // Media Tracking (Images/Videos)
+    // Extracting counts from arrays in portal_posts and individual rows in portal_photos
+    const mediaCounts = await pool.query(`
+        SELECT 
+            (SELECT COALESCE(SUM(array_length(images, 1)), 0) FROM portal_posts) + 
+            (SELECT COUNT(*) FROM portal_photos) as total_media,
+            (SELECT COALESCE(SUM(array_length(images, 1)), 0) FROM portal_posts WHERE created_at >= CURRENT_DATE) + 
+            (SELECT COUNT(*) FROM portal_photos WHERE created_at >= CURRENT_DATE) as media_today,
+            (SELECT COALESCE(SUM(array_length(images, 1)), 0) FROM portal_posts WHERE created_at >= DATE_TRUNC('year', CURRENT_DATE)) + 
+            (SELECT COUNT(*) FROM portal_photos WHERE created_at >= DATE_TRUNC('year', CURRENT_DATE)) as media_this_year
+    `);
+    stats.media = {
+        total: parseInt(mediaCounts.rows[0].total_media),
+        today: parseInt(mediaCounts.rows[0].media_today),
+        thisYear: parseInt(mediaCounts.rows[0].media_this_year)
+    };
+
+    // Engagement Tracking (Likes/Comments)
+    const engagementCounts = await pool.query(`
+        SELECT 
+            (SELECT COUNT(*) FROM portal_likes) as total_likes,
+            (SELECT COUNT(*) FROM portal_comments) as total_comments,
+            (SELECT COUNT(*) FROM portal_likes WHERE created_at >= CURRENT_DATE) as likes_today,
+            (SELECT COUNT(*) FROM portal_comments WHERE created_at >= CURRENT_DATE) as comments_today,
+            (SELECT COUNT(*) FROM portal_likes WHERE created_at >= DATE_TRUNC('year', CURRENT_DATE)) as likes_this_year,
+            (SELECT COUNT(*) FROM portal_comments WHERE created_at >= DATE_TRUNC('year', CURRENT_DATE)) as comments_this_year
+    `);
+    stats.engagement = {
+        likes: {
+            total: parseInt(engagementCounts.rows[0].total_likes),
+            today: parseInt(engagementCounts.rows[0].likes_today),
+            thisYear: parseInt(engagementCounts.rows[0].likes_this_year)
+        },
+        comments: {
+            total: parseInt(engagementCounts.rows[0].total_comments),
+            today: parseInt(engagementCounts.rows[0].comments_today),
+            thisYear: parseInt(engagementCounts.rows[0].comments_this_year)
+        }
+    };
+
     res.json({
       success: true,
       stats

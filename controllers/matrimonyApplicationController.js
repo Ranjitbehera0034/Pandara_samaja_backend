@@ -2,7 +2,7 @@
 // Handles member-facing and admin-facing matrimony form upload/verification
 
 const ApplicationModel = require('../models/matrimonyApplicationModel');
-const { uploadFile, FOLDER_MAP } = require('../config/googleDrive');
+const { uploadToFirebase, UPLOAD_PATHS } = require('../utils/firebaseStorage');
 const pool = require('../config/db');
 
 // ══════════════════════════════════════════════════
@@ -67,7 +67,7 @@ exports.submitForm = async (req, res) => {
 
         let form_file_url = null;
         if (req.file) {
-            const fileUrl = await uploadFile(req.file, FOLDER_MAP.MATRIMONY_FORMS);
+            const fileUrl = await uploadToFirebase(req.file, UPLOAD_PATHS.MATRIMONY_FORM(member.mobile));
             form_file_url = fileUrl;
         } const mime = req.file.mimetype || '';
         const fileType = mime.includes('pdf') ? 'pdf' : mime.includes('png') ? 'png' : 'jpg';
