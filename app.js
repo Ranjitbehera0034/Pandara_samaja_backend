@@ -75,7 +75,12 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '5mb' }));
 
 
 /* ─── 4. Upload folder + multer ───────────────────────────── */
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100 MB max per file (videos need room)
+  }
+});
 
 
 

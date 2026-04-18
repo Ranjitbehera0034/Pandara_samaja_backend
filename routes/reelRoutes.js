@@ -5,11 +5,14 @@ const { requirePortalAuth } = require('../middleware/portalAuth');
 module.exports = (upload) => {
     const router = express.Router();
 
-    // Reels Feed (Publicly visible but requires auth for interaction tracking)
+    // Reels Feed
     router.get('/', requirePortalAuth, reelCtrl.getReels);
 
-    // Create Reel
-    router.post('/', requirePortalAuth, upload.single('video'), reelCtrl.createReel);
+    // Step 1: Get a signed URL to upload video directly to Firebase Storage
+    router.get('/upload-url', requirePortalAuth, reelCtrl.getUploadUrl);
+
+    // Step 2: Create reel record after video is uploaded (no file passes through server)
+    router.post('/', requirePortalAuth, reelCtrl.createReel);
 
     // Interactions
     router.post('/:id/view', requirePortalAuth, reelCtrl.recordView);
