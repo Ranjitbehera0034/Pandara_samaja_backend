@@ -1,5 +1,5 @@
 const Reel = require('../models/reelModel');
-const { UPLOAD_PATHS } = require('../utils/firebaseStorage');
+const { UPLOAD_PATHS, getSignedMediaUrl } = require('../utils/firebaseStorage');
 const admin = require('../config/firebase');
 const path = require('path');
 
@@ -19,15 +19,13 @@ exports.getReels = async (req, res, next) => {
             offset
         });
 
-        // Proxy video URLs for private storage access
-        const proxiedReels = reels.map(r => {
-            let video_url = r.video_url;
-            if (video_url && video_url.includes('storage.googleapis.com')) {
-                const pathMatch = video_url.split('/').slice(4).join('/');
-                video_url = `/api/v1/portal/media?path=${encodeURIComponent(pathMatch)}`;
-            }
-            return { ...r, id: String(r.id), video_url };
-        });
+        // Resolve video URLs to signed URLs for direct playback
+        const proxiedReels = await Promise.all(reels.map(async r => ({
+            ...r,
+            id: String(r.id),
+            video_url: await getSignedMediaUrl(r.video_url),
+            author_photo: await getSignedMediaUrl(r.author_photo)
+        })));
 
         res.json({ success: true, reels: proxiedReels });
     } catch (err) {
@@ -107,8 +105,8 @@ exports.createReel = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'Video file not found in storage. Upload may have failed.' });
         }
 
-        // Store proxy URL (not the raw Firebase URL)
-        const video_url = `/api/v1/portal/media?path=${encodeURIComponent(storagePath)}`;
+        // Store the raw storage path (signed URL generated on read)
+        const video_url = storagePath;
 
         const reel = await Reel.create({
             authorId: membership_no,

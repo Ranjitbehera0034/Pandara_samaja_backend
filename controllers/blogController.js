@@ -1,13 +1,20 @@
 const Post = require('../models/blogModel');
-const { uploadToFirebase, UPLOAD_PATHS } = require('../utils/firebaseStorage');
+const { uploadToFirebase, getSignedMediaUrl, UPLOAD_PATHS } = require('../utils/firebaseStorage');
 exports.getAll = async (req, res, next) => {
   try {
     const {
       rows
     } = await Post.getAll();
+    // Resolve media for all posts
+    const enrichedPosts = await Promise.all(rows.map(async post => ({
+      ...post,
+      image_url: await getSignedMediaUrl(post.image_url),
+      video_url: await getSignedMediaUrl(post.video_url)
+    })));
+
     res.json({
       success: true,
-      posts: rows
+      posts: enrichedPosts
     });
   } catch (err) {
     console.error('Get Posts Error:', err);
@@ -24,7 +31,10 @@ exports.getOne = async (req, res, next) => {
         error: 'Post not found'
       });
     }
-    res.json(rows[0]);
+    const post = rows[0];
+    post.image_url = await getSignedMediaUrl(post.image_url);
+    post.video_url = await getSignedMediaUrl(post.video_url);
+    res.json(post);
   } catch (err) {
     console.error('Get Post Error:', err);
     next(err);
@@ -57,7 +67,10 @@ exports.create = async (req, res, next) => {
       image_url,
       video_url
     });
-    res.status(201).json(rows[0]);
+    const post = rows[0];
+    post.image_url = await getSignedMediaUrl(post.image_url);
+    post.video_url = await getSignedMediaUrl(post.video_url);
+    res.status(201).json(post);
   } catch (err) {
     console.error('Create Post Error:', err);
     next(err);
@@ -98,7 +111,10 @@ exports.update = async (req, res, next) => {
       image_url,
       video_url
     });
-    res.json(rows[0]);
+    const post = rows[0];
+    post.image_url = await getSignedMediaUrl(post.image_url);
+    post.video_url = await getSignedMediaUrl(post.video_url);
+    res.json(post);
   } catch (err) {
     console.error('Update Post Error:', err);
     next(err);

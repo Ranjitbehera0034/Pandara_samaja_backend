@@ -1,7 +1,7 @@
 // controllers/portalController.js — Member Portal API handlers
 const jwt = require('jsonwebtoken');
 const portal = require('../models/portalModel');
-const { uploadToFirebase, UPLOAD_PATHS } = require('../utils/firebaseStorage');
+const { uploadToFirebase, getSignedMediaUrl, UPLOAD_PATHS } = require('../utils/firebaseStorage');
 const pool = require('../config/db');
 const firebaseAdmin = require('../config/firebase');
 const { logUserAction } = require('../utils/auditLogger');
@@ -225,10 +225,13 @@ exports.getProfile = async (req, res) => {
                 village: member.village,
                 address: member.address,
                 head_gender: member.head_gender,
-                profile_photo_url: profilePhotoUrl ? profilePhotoUrl.replace('drive.google.com/uc?id=', '/api/v1/image-proxy/') : null,
+                profile_photo_url: await getSignedMediaUrl(profilePhotoUrl),
                 // Mask Aadhaar for security
                 aadhar_no: member.aadhar_no ? `********${member.aadhar_no.slice(-4)}` : null,
-                family_members: member.family_members || []
+                family_members: await Promise.all((member.family_members || []).map(async fm => ({
+                    ...fm,
+                    profile_photo_url: await getSignedMediaUrl(fm.profile_photo_url)
+                })))
             }
         });
     } catch (error) {
@@ -445,12 +448,11 @@ exports.createPost = async (req, res) => {
         // Return enriched post
         const enriched = await portal.getPost(post.id, member.membership_no);
 
-        // Ensure returned post media are proxied (in case some logic returned raw URLs)
-        if (enriched.images) {
-            enriched.images = enriched.images.map(url => 
-                url.includes('storage.googleapis.com') ? `/api/v1/portal/media?path=${encodeURIComponent(url.split('/').slice(4).join('/'))}` : url
-            );
+        // Ensure returned post media are signed URLs
+        if (enriched.images && Array.isArray(enriched.images)) {
+            enriched.images = await Promise.all(enriched.images.map(url => getSignedMediaUrl(url)));
         }
+        enriched.authorAvatar = await getSignedMediaUrl(enriched.authorAvatar);
 
         // Notify connected clients
         const io = req.app.get('io');
@@ -497,18 +499,16 @@ exports.getPosts = async (req, res) => {
             mobile: req.portalMember.mobile
         });
 
-        // For each post, fetch comments and proxy media URLs
+        // For each post, fetch comments and resolve media URLs to signed URLs
         for (const post of posts) {
             post.comments = await portal.getComments(post.id);
+            
+            // Resolve author photo
+            post.authorAvatar = await getSignedMediaUrl(post.authorAvatar);
+
+            // Resolve post images/videos
             if (post.images && Array.isArray(post.images)) {
-                post.images = post.images.map(url => {
-                    // Convert old static Firebase URLs to proxy URLs for privacy
-                    if (url && typeof url === 'string' && url.includes('storage.googleapis.com')) {
-                        const pathMatch = url.split('/').slice(4).join('/');
-                        return `/api/v1/portal/media?path=${encodeURIComponent(pathMatch)}`;
-                    }
-                    return url;
-                });
+                post.images = await Promise.all(post.images.map(url => getSignedMediaUrl(url)));
             }
         }
 
