@@ -102,6 +102,7 @@ module.exports = (upload) => {
     router.delete('/notifications/:id', requirePortalAuth, portalCtrl.deleteNotification);
 
     // Chat (REST endpoints for history)
+    router.get('/chat/search', requirePortalAuth, portalCtrl.searchChatContacts);
     router.get('/chat/contacts', requirePortalAuth, portalCtrl.getChatContacts);
     router.get('/chat/conversation/:memberId{/:mobile}', requirePortalAuth, portalCtrl.getConversation);
     router.put('/chat/read/:memberId{/:mobile}', requirePortalAuth, portalCtrl.markChatRead);

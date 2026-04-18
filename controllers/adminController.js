@@ -920,3 +920,71 @@ exports.postToChannel = async (req, res, next) => {
     next(error);
   }
 };
+
+// ═══════════════════════════════════════════════════
+// LIVE STREAMS MANAGEMENT
+// ═══════════════════════════════════════════════════
+
+exports.getAllLiveStreams = async (req, res) => {
+    try {
+        const communityModel = require('../models/communityModel');
+        const streams = await communityModel.getAllLiveStreams();
+        res.json({ success: true, streams });
+    } catch (e) {
+        console.error('Get all live streams error:', e);
+        res.status(500).json({ success: false, message: 'Failed to load live streams' });
+    }
+};
+
+exports.createLiveStream = async (req, res) => {
+    try {
+        const { title, description, stream_url } = req.body;
+        const communityModel = require('../models/communityModel');
+        const stream = await communityModel.createLiveStream(title, description, stream_url, 'Admin');
+        
+        // Notify socket clients
+        const io = req.app.get('io');
+        if (io) io.emit('live_stream_started', stream);
+
+        res.json({ success: true, stream });
+    } catch (e) {
+        console.error('Create live stream error:', e);
+        res.status(500).json({ success: false, message: 'Failed to create live stream' });
+    }
+};
+
+exports.updateLiveStreamStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { is_active } = req.body;
+        const communityModel = require('../models/communityModel');
+        const stream = await communityModel.updateLiveStreamStatus(id, is_active);
+        
+        const io = req.app.get('io');
+        if (io) {
+            if (is_active) io.emit('live_stream_started', stream);
+            else io.emit('live_stream_ended', { id });
+        }
+
+        res.json({ success: true, stream });
+    } catch (e) {
+        console.error('Update live stream status error:', e);
+        res.status(500).json({ success: false, message: 'Failed to update live stream status' });
+    }
+};
+
+exports.deleteLiveStream = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const communityModel = require('../models/communityModel');
+        await communityModel.deleteLiveStream(id);
+
+        const io = req.app.get('io');
+        if (io) io.emit('live_stream_ended', { id });
+
+        res.json({ success: true, message: 'Stream deleted successfully' });
+    } catch (e) {
+        console.error('Delete live stream error:', e);
+        res.status(500).json({ success: false, message: 'Failed to delete live stream' });
+    }
+};

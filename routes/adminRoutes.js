@@ -67,4 +67,10 @@ router.get('/documents', docCtrl.getDocuments);
 router.post('/documents', uploadDoc.single('file'), docCtrl.addDocument);
 router.delete('/documents/:id', docCtrl.deleteDocument);
 
+// Live Streams Management
+router.get('/live-streams', adminController.getAllLiveStreams);
+router.post('/live-streams', adminController.createLiveStream);
+router.put('/live-streams/:id/status', adminController.updateLiveStreamStatus);
+router.delete('/live-streams/:id', adminController.deleteLiveStream);
+
 module.exports = router;

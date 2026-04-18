@@ -1286,6 +1286,32 @@ exports.getChatContacts = async (req, res) => {
 };
 
 /**
+ * GET /api/portal/chat/search
+ * Search chat contacts (including family members)
+ */
+exports.searchChatContacts = async (req, res) => {
+    try {
+        const searchQuery = (req.query.q || '').trim();
+        const limit = parseInt(req.query.limit) || 50;
+        
+        if (!searchQuery) {
+            return res.json({ success: true, members: [] });
+        }
+
+        const members = await portal.searchChatUsers(
+            searchQuery, 
+            req.portalMember.membership_no, 
+            req.portalMember.mobile,
+            limit
+        );
+        res.json({ success: true, members });
+    } catch (error) {
+        console.error('Search chat contacts error:', error);
+        res.status(500).json({ success: false, message: 'Failed to search contacts' });
+    }
+};
+
+/**
  * GET /api/portal/chat/conversation/:memberId
  * Get conversation history with a specific member
  */

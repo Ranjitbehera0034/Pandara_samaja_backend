@@ -1020,6 +1020,39 @@ module.exports.getChatContacts = async (memberId, memberMobile) => {
 };
 
 /**
+ * Search all active chatting users (flattened HoF and Family Members) who have mobile numbers
+ */
+exports.searchChatUsers = async (searchQuery, currentMemberId, currentMobile, limit = 50) => {
+    const searchPattern = `%${searchQuery}%`;
+    const res = await pool.query(
+        `SELECT membership_no, name, mobile, profile_photo_url, village
+         FROM members
+         WHERE (name ILIKE $1 OR mobile ILIKE $1 OR membership_no ILIKE $1)
+           AND mobile IS NOT NULL AND TRIM(mobile) != ''
+           AND NOT (membership_no = $2 AND mobile = $3)
+           AND (is_banned IS NULL OR is_banned = false)
+         
+         UNION ALL
+         
+         SELECT m.membership_no, 
+                f->>'name' AS name, 
+                f->>'mobile' AS mobile, 
+                f->>'profile_photo_url' AS profile_photo_url, 
+                m.village
+         FROM members m, jsonb_array_elements(m.family_members) f
+         WHERE ( (f->>'name') ILIKE $1 OR (f->>'mobile') ILIKE $1 )
+           AND (f->>'mobile') IS NOT NULL AND TRIM(f->>'mobile') != ''
+           AND NOT (m.membership_no = $2 AND (f->>'mobile') = $3)
+           AND (m.is_banned IS NULL OR m.is_banned = false)
+         
+         ORDER BY name
+         LIMIT $4`,
+        [searchPattern, currentMemberId, currentMobile || '', limit]
+    );
+    return res.rows;
+};
+
+/**
  * Get Public Profile data (Name, Relation, Posts, Followers) efficiently
  */
 exports.getPublicProfileData = async (membershipNo, name, viewerNo, viewerMobile) => {
