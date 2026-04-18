@@ -23,6 +23,23 @@ module.exports = (upload) => {
     // Firebase verify token route
     router.post('/login/firebase', loginRateLimiter, validate({ body: portalVerifyFirebaseSchema }), portalCtrl.loginWithFirebase);
 
+    // ── Public: Downloadable Documents ──
+    router.get('/documents/matrimony-form', async (req, res) => {
+        try {
+            const admin = require('../config/firebase');
+            const bucket = admin.storage().bucket('nikhila-odisha-pandara-samaja.firebasestorage.app');
+            const file = bucket.file('pandarasamaja document/matrimony form/CASTE_MATRIMONY.pdf');
+            const [url] = await file.getSignedUrl({
+                action: 'read',
+                expires: Date.now() + 1000 * 60 * 60 * 24, // 24h signed URL
+            });
+            return res.json({ success: true, url });
+        } catch (err) {
+            console.error('Failed to generate matrimony form URL:', err.message);
+            return res.status(500).json({ success: false, message: 'Could not generate download link' });
+        }
+    });
+
     // ── Protected routes (require member portal JWT) ──
 
     // Profile

@@ -1,6 +1,6 @@
 const Candidate = require('../models/candidateModel');
 const model = require('../models/candidateModel');
-const { uploadFile, FOLDER_MAP } = require('../config/googleDrive');
+const { uploadToFirebase, UPLOAD_PATHS } = require('../utils/firebaseStorage');
 
 // controller
 exports.getAll = async (req, res) => {
@@ -43,10 +43,10 @@ exports.create = async (req, res, next) => {
 
     // 2. Handle uploads: photo AND manual_form
     if (req.files && req.files.photo && req.files.photo.length > 0) {
-      data.photo = await uploadFile(req.files.photo[0], FOLDER_MAP.MATRIMONY_PHOTOS);
+      data.photo = await uploadToFirebase(req.files.photo[0], UPLOAD_PATHS.MATRIMONY_CANDIDATE(data.phone || Date.now()));
     }
     if (req.files && req.files.manual_form && req.files.manual_form.length > 0) {
-      data.manual_form = await uploadFile(req.files.manual_form[0], FOLDER_MAP.MATRIMONY_FORMS);
+      data.manual_form = await uploadToFirebase(req.files.manual_form[0], UPLOAD_PATHS.MATRIMONY_FORM(data.phone || Date.now()));
     }
 
 
@@ -74,12 +74,12 @@ exports.update = async (req, res, next) => {
 
     if (req.files) {
       if (req.files && req.files.photo && req.files.photo.length > 0) {
-        data.photo = await uploadFile(req.files.photo[0], FOLDER_MAP.MATRIMONY_PHOTOS);
+        data.photo = await uploadToFirebase(req.files.photo[0], UPLOAD_PATHS.MATRIMONY_CANDIDATE(data.phone || existing.phone || id));
       } else if (!data.photo) {
         delete data.photo;
       }
       if (req.files && req.files.manual_form && req.files.manual_form.length > 0) {
-        data.manual_form = await uploadFile(req.files.manual_form[0], FOLDER_MAP.MATRIMONY_FORMS);
+        data.manual_form = await uploadToFirebase(req.files.manual_form[0], UPLOAD_PATHS.MATRIMONY_FORM(data.phone || existing.phone || id));
       } else if (!data.manual_form) {
         data.manual_form = existing.manual_form;
       }

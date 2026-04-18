@@ -62,7 +62,8 @@ if (!serviceAccount) {
 let firebaseAdmin;
 if (serviceAccount) {
     firebaseAdmin = admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+        credential: admin.credential.cert(serviceAccount),
+        storageBucket: 'nikhila-odisha-pandara-samaja.firebasestorage.app'
     });
 } else {
     // Initialize without credentials — will fail on auth calls but won't crash the server

@@ -1,6 +1,5 @@
 const LeaderModel = require('../models/leaderModel');
-const gDrive = require('../config/googleDrive');
-const { FOLDER_MAP } = require('../config/googleDrive');
+const { uploadToFirebase, UPLOAD_PATHS } = require('../utils/firebaseStorage');
 
 exports.getAllLeaders = async (req, res, next) => {
   try {
@@ -53,7 +52,7 @@ exports.createLeader = async (req, res, next) => {
   try {
     let image_url = req.body.image_url || null;
     if (req.file) {
-      image_url = await gDrive.uploadFile(req.file, FOLDER_MAP.LEADERS);
+      image_url = await uploadToFirebase(req.file, UPLOAD_PATHS.LEADER_PHOTO(req.body.level || 'General'));
     }
     const data = {
       ...req.body,
@@ -73,7 +72,7 @@ exports.updateLeader = async (req, res, next) => {
   try {
     let image_url = req.body.existingImage || null;
     if (req.file) {
-      image_url = await gDrive.uploadFile(req.file, FOLDER_MAP.LEADERS);
+      image_url = await uploadToFirebase(req.file, UPLOAD_PATHS.LEADER_PHOTO(req.body.level || 'General'));
     } else if (!image_url && req.body.removeImage !== 'true') {
       image_url = req.body.existingImage;
     }

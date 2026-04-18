@@ -1,4 +1,4 @@
-const pool = require('./config/db');
+const pool = require('../../config/db');
 
 async function migrate() {
     console.log('Starting migration for comment likes and replies...');
