@@ -65,7 +65,48 @@ async function uploadToFirebase(file, destinationPath) {
     return `/api/v1/portal/media?path=${encodeURIComponent(fullPath)}`;
 }
 
+/**
+ * Resolves a private media path or proxy URL into a temporary Firebase Signed URL.
+ * 
+ * @param {String} source - The raw path (e.g., "blogs/...") OR a proxy URL (/api/v1/portal/media?path=...)
+ * @param {Number} expiresMinutes - Optional duration (default 60 mins)
+ * @returns {Promise<String>} - The signed URL
+ */
+async function getSignedMediaUrl(source, expiresMinutes = 60) {
+    if (!source || typeof source !== 'string') return source;
+
+    let filePath = source;
+
+    // Detect if it's already a proxy URL and extract the path
+    if (source.includes('/media?path=')) {
+        try {
+            const urlObj = new URL(source, 'http://localhost'); // Dummy base for parsing
+            filePath = urlObj.searchParams.get('path');
+        } catch (e) {
+            // If parsing fails, use regex as fallback
+            const match = source.match(/path=([^&]+)/);
+            if (match) filePath = decodeURIComponent(match[1]);
+        }
+    }
+
+    // Basic check for Firebase path (must not be a full URL already)
+    if (!filePath || filePath.startsWith('http')) return source;
+
+    try {
+        const storageFile = bucket.file(filePath);
+        const [url] = await storageFile.getSignedUrl({
+            action: 'read',
+            expires: Date.now() + 1000 * 60 * expiresMinutes,
+        });
+        return url;
+    } catch (err) {
+        console.warn(`Failed to sign media URL for ${filePath}:`, err.message);
+        return source; // Fallback to original
+    }
+}
+
 module.exports = {
     uploadToFirebase,
+    getSignedMediaUrl,
     UPLOAD_PATHS
 };
