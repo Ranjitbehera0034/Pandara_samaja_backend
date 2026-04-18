@@ -6,7 +6,7 @@ const { uploadToFirebase, UPLOAD_PATHS } = require('../utils/firebaseStorage');
  */
 exports.getReels = async (req, res, next) => {
     try {
-        const { membership_no, mobile } = req.user || {};
+        const { membership_no, mobile } = req.portalMember || {};
         const { page = 1, limit = 10 } = req.query;
         const offset = (parseInt(page) - 1) * parseInt(limit);
 
@@ -46,7 +46,7 @@ exports.getReels = async (req, res, next) => {
  */
 exports.createReel = async (req, res, next) => {
     try {
-        const { membership_no, mobile, name } = req.user;
+        const { membership_no, mobile, name } = req.portalMember;
         const { caption, music_name } = req.body;
 
         if (!req.file) {
@@ -103,7 +103,7 @@ exports.recordShare = async (req, res, next) => {
  */
 exports.toggleLike = async (req, res, next) => {
     try {
-        const { membership_no, mobile } = req.user;
+        const { membership_no, mobile } = req.portalMember;
         const result = await Reel.toggleLike(req.params.id, membership_no, mobile);
         res.json({ success: true, ...result });
     } catch (err) {
@@ -116,7 +116,7 @@ exports.toggleLike = async (req, res, next) => {
  */
 exports.deleteReel = async (req, res, next) => {
     try {
-        const { membership_no } = req.user;
+        const { membership_no } = req.portalMember;
         const deleted = await Reel.delete(req.params.id, membership_no);
         
         if (!deleted) {
