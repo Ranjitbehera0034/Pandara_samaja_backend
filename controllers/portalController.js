@@ -599,6 +599,20 @@ exports.reportPost = async (req, res) => {
     }
 };
 
+/**
+ * POST /api/portal/posts/:id/share
+ * Record a genuine share event
+ */
+exports.recordShare = async (req, res) => {
+    try {
+        const result = await portal.recordShare(req.params.id);
+        res.json({ success: true, share_count: result.share_count });
+    } catch (error) {
+        console.error('Record share error:', error);
+        res.status(500).json({ success: false, message: 'Failed to record share' });
+    }
+};
+
 
 // ═══════════════════════════════════════════════════
 //  LIKES

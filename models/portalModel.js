@@ -571,6 +571,24 @@ exports.deleteComment = async (commentId, memberId) => {
 
 
 // ═══════════════════════════════════════════════════
+//  SHARES
+// ═══════════════════════════════════════════════════
+
+/**
+ * Record a share event on a post. Returns { share_count }
+ */
+exports.recordShare = async (postId) => {
+    // Ensure column exists (idempotent)
+    await pool.query(`ALTER TABLE portal_posts ADD COLUMN IF NOT EXISTS share_count INTEGER DEFAULT 0`).catch(() => {});
+    const res = await pool.query(
+        `UPDATE portal_posts SET share_count = COALESCE(share_count, 0) + 1 WHERE id = $1 RETURNING share_count`,
+        [postId]
+    );
+    return res.rows[0] || { share_count: 0 };
+};
+
+
+// ═══════════════════════════════════════════════════
 //  PHOTOS (GALLERY)
 // ═══════════════════════════════════════════════════
 
