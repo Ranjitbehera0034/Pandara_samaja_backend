@@ -10,7 +10,10 @@ const verifyTurnstile = async (req, res, next) => {
     const secretKey = process.env.TURNSTILE_SECRET_KEY;
 
     if (!secretKey) {
-        console.warn('⚠️ TURNSTILE_SECRET_KEY is not defined in environment variables. Falling back to test key.');
+        console.warn('⚠️ [CAPTCHA] TURNSTILE_SECRET_KEY is missing. Using TEST key.');
+    } else {
+        const masked = secretKey.length > 8 ? `${secretKey.substring(0, 4)}...${secretKey.slice(-4)}` : '****';
+        console.log(`ℹ️ [CAPTCHA] Verifying with secret: ${masked}`);
     }
 
     if (!token) {

@@ -7,6 +7,7 @@ const portalVerifyFirebaseSchema = z.object({
         .transform(val => val.replace(/\D/g, ''))
         .refine(val => val.length === 10, 'Mobile must be exactly 10 digits'),
     idToken: z.string().min(1, 'Firebase ID token is required'),
+    captchaToken: z.string().optional(),
 });
 
 module.exports = {
