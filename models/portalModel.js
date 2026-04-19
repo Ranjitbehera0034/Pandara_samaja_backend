@@ -1226,3 +1226,50 @@ exports.getPublicProfileData = async (membershipNo, name, viewerNo, viewerMobile
         joined: new Date(member.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     };
 };
+
+/**
+ * Record a video view and log it
+ */
+exports.recordVideoView = async ({ videoType, videoId, viewerId, viewerType, viewerName, viewerMobile }) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Increment count in the respective table
+        const tableName = videoType === 'reel' ? 'portal_reels' : 'portal_posts';
+        
+        if (tableName !== 'portal_reels' && tableName !== 'portal_posts') {
+            throw new Error('Invalid video type');
+        }
+
+        await client.query(`UPDATE ${tableName} SET views_count = COALESCE(views_count, 0) + 1 WHERE id = $1`, [videoId]);
+
+        // 2. Log the view event
+        await client.query(
+            `INSERT INTO portal_video_views_log (video_type, video_id, viewer_id, viewer_type, viewer_name, viewer_mobile)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [videoType, videoId, viewerId, viewerType, viewerName, viewerMobile]
+        );
+
+        await client.query('COMMIT');
+    } catch (e) {
+        await client.query('ROLLBACK');
+        console.error('Failed to record video view:', e);
+        throw e;
+    } finally {
+        client.release();
+    }
+};
+
+/**
+ * Get video analytics for admins
+ */
+exports.getVideoAnalytics = async (videoType, videoId) => {
+    const res = await pool.query(
+        `SELECT * FROM portal_video_views_log 
+         WHERE video_type = $1 AND video_id = $2 
+         ORDER BY watched_at DESC`,
+        [videoType, videoId]
+    );
+    return res.rows;
+};

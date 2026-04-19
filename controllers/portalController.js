@@ -1363,3 +1363,32 @@ exports.markChatRead = async (req, res) => {
     }
 };
 
+/**
+ * POST /api/v1/portal/video/view
+ * Body: { videoType, videoId }
+ */
+exports.recordVideoView = async (req, res, next) => {
+    try {
+        const { videoType, videoId } = req.body;
+        const member = req.portalMember;
+
+        if (!videoType || !videoId) {
+            return res.status(400).json({ success: false, message: 'Missing videoType or videoId' });
+        }
+
+        await portal.recordVideoView({
+            videoType,
+            videoId,
+            viewerId: member.membership_no,
+            viewerType: 'member',
+            viewerName: member.name,
+            viewerMobile: member.mobile
+        });
+
+        res.json({ success: true, message: 'View recorded' });
+    } catch (error) {
+        console.error('Record video view error:', error);
+        next(error);
+    }
+};
+

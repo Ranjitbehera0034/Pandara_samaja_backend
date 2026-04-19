@@ -2,10 +2,12 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
 const multer = require('multer');
 require('dotenv').config();
 
 const app = express();
+app.use(cookieParser());
 
 /* ─── 1. Allowed-origin lists ──────────────────────────────── */
 const allowedOrigins = [
