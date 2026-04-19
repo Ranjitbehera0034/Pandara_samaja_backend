@@ -223,6 +223,79 @@ exports.getDashboardStats = async (req, res, next) => {
   }
 };
 
+/**
+ * Get deep insights into video performance and user interests
+ */
+exports.getVideoAnalytics = async (req, res, next) => {
+    try {
+        const stats = {};
+
+        // 1. Global Category Interests (What type of videos are favorite?)
+        const categoryStats = await pool.query(`
+            SELECT p.category, COUNT(*) as view_count
+            FROM portal_video_views_log v
+            JOIN portal_posts p ON p.id = v.video_id
+            WHERE v.video_type = 'post'
+            GROUP BY p.category
+            ORDER BY view_count DESC
+        `);
+        stats.categoryInterests = categoryStats.rows;
+
+        // 2. Engagement by Duration (How many times each duration range is watched)
+        const durationStats = await pool.query(`
+            SELECT 
+                CASE 
+                    WHEN duration_seconds < 10 THEN '0-10s'
+                    WHEN duration_seconds < 30 THEN '10-30s'
+                    WHEN duration_seconds < 60 THEN '30s-1m'
+                    ELSE '1m+'
+                END as duration_range,
+                COUNT(*) as count
+            FROM portal_video_views_log
+            GROUP BY duration_range
+            ORDER BY count DESC
+        `);
+        stats.durationEngagement = durationStats.rows;
+
+        // 3. Top Videos Heatmap Data (Which segments are watched more?)
+        // Aggregating segments for the most viewed video
+        const topVideo = await pool.query(`
+            SELECT video_id, COUNT(*) as view_count 
+            FROM portal_video_views_log 
+            WHERE video_type = 'post' 
+            GROUP BY video_id 
+            ORDER BY view_count DESC LIMIT 1
+        `);
+
+        if (topVideo.rows.length > 0) {
+            const videoId = topVideo.rows[0].video_id;
+            const segmentsRes = await pool.query(`
+                SELECT segments_watched 
+                FROM portal_video_views_log 
+                WHERE video_id = $1 AND video_type = 'post'
+            `, [videoId]);
+
+            // Simple segment counter implementation
+            const heatmap = {};
+            segmentsRes.rows.forEach(row => {
+                const segs = row.segments_watched || [];
+                segs.forEach(s => {
+                    heatmap[s] = (heatmap[s] || 0) + 1;
+                });
+            });
+            stats.topVideoHeatmap = {
+                videoId,
+                heatmap
+            };
+        }
+
+        res.json({ success: true, stats });
+    } catch (error) {
+        console.error('Video analytics error:', error);
+        next(error);
+    }
+};
+
 // --- Matrimony Approvals ---
 
 // Get all candidates (including pending)
