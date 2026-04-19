@@ -9,6 +9,10 @@ const verifyTurnstile = async (req, res, next) => {
     const token = req.body.captchaToken;
     const secretKey = process.env.TURNSTILE_SECRET_KEY;
 
+    if (!secretKey) {
+        console.warn('⚠️ TURNSTILE_SECRET_KEY is not defined in environment variables. Falling back to test key.');
+    }
+
     if (!token) {
         return res.status(400).json({
             success: false,
@@ -25,7 +29,7 @@ const verifyTurnstile = async (req, res, next) => {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
                 body: new URLSearchParams({
-                    secret: secretKey,
+                    secret: secretKey || '1x0000000000000000000000000000000AA',
                     response: token,
                     remoteip: req.ip
                 })

@@ -1,5 +1,6 @@
 const Post = require('../models/blogModel');
 const { uploadToFirebase, getSignedMediaUrl, UPLOAD_PATHS } = require('../utils/firebaseStorage');
+
 exports.getAll = async (req, res, next) => {
   try {
     const {
@@ -21,6 +22,7 @@ exports.getAll = async (req, res, next) => {
     next(err);
   }
 };
+
 exports.getOne = async (req, res, next) => {
   try {
     const {
@@ -40,6 +42,7 @@ exports.getOne = async (req, res, next) => {
     next(err);
   }
 };
+
 exports.create = async (req, res, next) => {
   try {
     const {
@@ -76,6 +79,7 @@ exports.create = async (req, res, next) => {
     next(err);
   }
 };
+
 exports.update = async (req, res, next) => {
   try {
     const {
@@ -120,6 +124,7 @@ exports.update = async (req, res, next) => {
     next(err);
   }
 };
+
 exports.remove = async (req, res, next) => {
   try {
     await Post.remove(req.params.id);
@@ -128,6 +133,90 @@ exports.remove = async (req, res, next) => {
     });
   } catch (err) {
     console.error('Delete Post Error:', err);
+    next(err);
+  }
+};
+
+/**
+ * POST /api/v1/posts/:id/view
+ *
+ * Records a single video-view event for a blog/announcement post.
+ * Accepts EITHER a member-portal token OR an admin token (via requireAnyAuth middleware).
+ *
+ * Body: (none required — viewer identity comes from the token)
+ */
+exports.recordView = async (req, res, next) => {
+  try {
+    const postId = req.params.id;
+
+    // Verify the post exists
+    const { rows } = await Post.getOne(postId);
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    // Build viewer descriptor from whichever token was used
+    let viewer;
+    if (req.portalMember) {
+      // Member-portal token
+      viewer = {
+        type: 'member',
+        id: req.portalMember.membership_no,
+        name: req.portalMember.name,
+        mobile: req.portalMember.mobile || null
+      };
+    } else if (req.user) {
+      // Admin / SuperAdmin token
+      viewer = {
+        type: 'admin',
+        id: req.user.username,
+        name: req.user.username,
+        mobile: null
+      };
+    } else {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const result = await Post.recordVideoView(postId, viewer);
+
+    return res.json({ success: true, views_count: result.views_count });
+  } catch (err) {
+    console.error('Record View Error:', err);
+    next(err);
+  }
+};
+
+/**
+ * GET /api/v1/posts/:id/viewers?page=1&limit=20
+ *
+ * Admin-only. Returns a paginated list of every viewer who has watched the video.
+ */
+exports.getViewers = async (req, res, next) => {
+  try {
+    const postId = req.params.id;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit) || 20);
+    const offset = (page - 1) * limit;
+
+    // Verify the post exists
+    const { rows } = await Post.getOne(postId);
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    const { viewers, total } = await Post.getVideoViewers(postId, limit, offset);
+
+    return res.json({
+      success: true,
+      post_id: postId,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+      viewers
+    });
+  } catch (err) {
+    console.error('Get Viewers Error:', err);
     next(err);
   }
 };
