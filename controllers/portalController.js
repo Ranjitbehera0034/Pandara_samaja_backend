@@ -160,7 +160,12 @@ exports.getSignedMediaUrl = async (req, res) => {
                 'Accept-Ranges': 'bytes',
                 'Content-Length': chunksize,
                 'Content-Type': contentType,
-                'Cache-Control': 'public, max-age=3600'
+                'Cache-Control': 'public, max-age=31536000, immutable' // Long cache for immutable media
+            });
+
+            stream.on('error', (err) => {
+                console.error('[MEDIA PROXY] Stream error:', err);
+                if (!res.headersSent) res.status(500).end();
             });
 
             stream.pipe(res);
@@ -173,7 +178,12 @@ exports.getSignedMediaUrl = async (req, res) => {
                 'Cache-Control': 'public, max-age=3600'
             });
 
-            file.createReadStream().pipe(res);
+            const stream = file.createReadStream();
+            stream.on('error', (err) => {
+                console.error('[MEDIA PROXY] Stream error:', err);
+                if (!res.headersSent) res.status(500).end();
+            });
+            stream.pipe(res);
         }
 
     } catch (error) {
@@ -501,23 +511,30 @@ exports.getPosts = async (req, res) => {
 
         // For each post, fetch comments and resolve media URLs to signed URLs
         for (const post of posts) {
-            const commentData = await portal.getComments(post.id, req.portalMember.membership_no, req.portalMember.mobile);
-            post.comments = commentData.comments;
-            post.commentsCount = commentData.total; // Ensure count is accurate
-            
-            // Resolve author photo
-            post.authorAvatar = await getSignedMediaUrl(post.authorAvatar);
+            try {
+                const commentData = await portal.getComments(post.id, req.portalMember.membership_no, req.portalMember.mobile);
+                post.comments = commentData.comments;
+                post.commentsCount = commentData.total; // Ensure count is accurate
+                
+                // Resolve author photo
+                post.authorAvatar = await getSignedMediaUrl(post.authorAvatar);
 
-            // Resolve comment author avatars
-            if (Array.isArray(post.comments)) {
-                for (const comment of post.comments) {
-                    comment.authorAvatar = await getSignedMediaUrl(comment.authorAvatar);
+                // Resolve comment author avatars
+                if (Array.isArray(post.comments)) {
+                    for (const comment of post.comments) {
+                        comment.authorAvatar = await getSignedMediaUrl(comment.authorAvatar);
+                    }
                 }
-            }
 
-            // Resolve post images/videos
-            if (post.images && Array.isArray(post.images)) {
-                post.images = await Promise.all(post.images.map(url => getSignedMediaUrl(url)));
+                // Resolve post images/videos
+                if (post.images && Array.isArray(post.images)) {
+                    post.images = await Promise.all(post.images.map(url => getSignedMediaUrl(url)));
+                }
+            } catch (postError) {
+                console.error(`[GET_POSTS] Error enriching post ${post.id}:`, postError);
+                // Continue to next post so one failure doesn't break the whole feed
+                post.comments = post.comments || [];
+                post.commentsCount = post.commentsCount || 0;
             }
         }
 

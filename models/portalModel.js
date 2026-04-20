@@ -235,7 +235,8 @@ exports.getPost = async (postId, membershipNo, mobile) => {
               SELECT 1 FROM portal_likes l
               WHERE l.post_id = p.id AND l.member_id = $2 AND l.member_mobile = $3
             ) AS liked_by_me,
-            (SELECT COUNT(*) FROM portal_comments c WHERE c.post_id = p.id) AS comments_count
+            (SELECT COUNT(*) FROM portal_comments c WHERE c.post_id = p.id) AS comments_count,
+            COALESCE(p.views_count, 0) AS views_count
      FROM portal_posts p
      JOIN members m ON m.membership_no = p.author_id
      WHERE p.id = $1`,
