@@ -501,10 +501,19 @@ exports.getPosts = async (req, res) => {
 
         // For each post, fetch comments and resolve media URLs to signed URLs
         for (const post of posts) {
-            post.comments = await portal.getComments(post.id);
+            const commentData = await portal.getComments(post.id, req.portalMember.membership_no, req.portalMember.mobile);
+            post.comments = commentData.comments;
+            post.commentsCount = commentData.total; // Ensure count is accurate
             
             // Resolve author photo
             post.authorAvatar = await getSignedMediaUrl(post.authorAvatar);
+
+            // Resolve comment author avatars
+            if (Array.isArray(post.comments)) {
+                for (const comment of post.comments) {
+                    comment.authorAvatar = await getSignedMediaUrl(comment.authorAvatar);
+                }
+            }
 
             // Resolve post images/videos
             if (post.images && Array.isArray(post.images)) {
