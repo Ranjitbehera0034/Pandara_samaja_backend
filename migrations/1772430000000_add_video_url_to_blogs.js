@@ -3,9 +3,10 @@
 exports.shorthands = undefined;
 
 exports.up = pgm => {
-    pgm.addColumn('posts', {
-        video_url: { type: 'text' }
-    });
+    pgm.sql(`
+        ALTER TABLE posts 
+        ADD COLUMN IF NOT EXISTS video_url TEXT;
+    `);
 };
 
 exports.down = pgm => {
