@@ -12,6 +12,7 @@ router.get('/posts', adminController.getAllFeedPosts);
 router.delete('/reports/:reportId/dismiss', adminController.dismissReport);
 router.delete('/posts/:postId', adminController.deletePortalPost);
 router.get('/stats', adminController.getDashboardStats);
+router.get('/stats/video-analytics', adminController.getVideoAnalytics);
 
 // Broadcasts & Channels
 router.post('/broadcast/whatsapp', adminController.broadcastWhatsapp);

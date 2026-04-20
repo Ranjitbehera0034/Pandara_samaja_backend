@@ -203,7 +203,8 @@ exports.getPosts = async ({ page = 1, limit = 20, membershipNo = null, mobile = 
               SELECT 1 FROM portal_likes l
               WHERE l.post_id = p.id AND l.member_id = $3 AND l.member_mobile = $4
             ) AS liked_by_me,
-            (SELECT COUNT(*) FROM portal_comments c WHERE c.post_id = p.id) AS comments_count
+            (SELECT COUNT(*) FROM portal_comments c WHERE c.post_id = p.id) AS comments_count,
+            COALESCE(p.views_count, 0) AS views_count
      FROM portal_posts p
      JOIN members m ON m.membership_no = p.author_id
      ORDER BY p.created_at DESC
@@ -585,6 +586,66 @@ exports.recordShare = async (postId) => {
         [postId]
     );
     return res.rows[0] || { share_count: 0 };
+};
+
+/**
+ * Log a detailed video view event.
+ * Track total count AND detailed telemetry for heatmaps/analytics.
+ */
+exports.logVideoView = async (postId, viewerData) => {
+    const { 
+        viewerId, viewerType, viewerName, viewerMobile,
+        durationSeconds = 0, segments = []
+    } = viewerData;
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Increment total views on the post (idempotent column check)
+        await client.query(`ALTER TABLE portal_posts ADD COLUMN IF NOT EXISTS views_count INTEGER DEFAULT 0`).catch(() => {});
+        await client.query(
+            `UPDATE portal_posts SET views_count = COALESCE(views_count, 0) + 1 WHERE id = $1`,
+            [postId]
+        );
+
+        // 2. Log individual event for analytics
+        await client.query(
+            `INSERT INTO portal_video_views_log (
+                video_type, video_id, 
+                viewer_id, viewer_type, viewer_name, viewer_mobile,
+                duration_seconds, segments_watched
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+                'post', postId,
+                viewerId, viewerType, viewerName, viewerMobile,
+                durationSeconds, JSON.stringify(segments)
+            ]
+        );
+
+        await client.query('COMMIT');
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+};
+
+/**
+ * Get user interest profile based on categories of videos watched
+ */
+exports.getUserInterests = async (viewerId) => {
+    const res = await pool.query(`
+        SELECT p.category, COUNT(*) as watch_count
+        FROM portal_video_views_log v
+        JOIN portal_posts p ON p.id = v.video_id
+        WHERE v.viewer_id = $1 AND v.video_type = 'post'
+        GROUP BY p.category
+        ORDER BY watch_count DESC
+        LIMIT 5
+    `, [viewerId]);
+    return res.rows;
 };
 
 

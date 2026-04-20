@@ -613,6 +613,32 @@ exports.recordShare = async (req, res) => {
     }
 };
 
+/**
+ * POST /api/v1/portal/posts/:id/view
+ * Captures detailed telemetry (duration, segments) for analytics
+ */
+exports.recordView = async (req, res) => {
+    try {
+        const { durationSeconds, segments } = req.body;
+        const member = req.portalMember;
+
+        const viewerData = {
+            viewerId: member?.membership_no || 'anonymous',
+            viewerType: 'member',
+            viewerName: member?.name || 'Anonymous',
+            viewerMobile: member?.mobile || '',
+            durationSeconds: parseInt(durationSeconds) || 0,
+            segments: segments || []
+        };
+
+        await portal.logVideoView(req.params.id, viewerData);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Record view error:', error);
+        res.status(500).json({ success: false, message: 'Failed to record view' });
+    }
+};
+
 
 // ═══════════════════════════════════════════════════
 //  LIKES

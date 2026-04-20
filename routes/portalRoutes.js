@@ -70,6 +70,7 @@ module.exports = (upload) => {
     router.delete('/posts/:id', requirePortalAuth, portalCtrl.deletePost);
     router.post('/posts/:id/report', requirePortalAuth, portalCtrl.reportPost);
     router.post('/posts/:id/share', requirePortalAuth, portalCtrl.recordShare);
+    router.post('/posts/:id/view', requirePortalAuth, portalCtrl.recordView);
 
     // Likes
     router.post('/posts/:id/like', requirePortalAuth, portalCtrl.toggleLike);
