@@ -603,8 +603,7 @@ exports.logVideoView = async (postId, viewerData) => {
     try {
         await client.query('BEGIN');
 
-        // 1. Increment total views on the post (idempotent column check)
-        await client.query(`ALTER TABLE portal_posts ADD COLUMN IF NOT EXISTS views_count INTEGER DEFAULT 0`).catch(() => {});
+        // 1. Increment total views on the post
         await client.query(
             `UPDATE portal_posts SET views_count = COALESCE(views_count, 0) + 1 WHERE id = $1`,
             [postId]
