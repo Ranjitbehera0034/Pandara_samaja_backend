@@ -63,8 +63,7 @@ module.exports = (upload) => {
     const cache = apicache.middleware;
 
     // Community Posts (Feed)
-    // Cache feed posts for 1 minute
-    router.get('/posts', requirePortalAuth, cache('1 minute'), portalCtrl.getPosts);
+    router.get('/posts', requirePortalAuth, portalCtrl.getPosts);
     router.post('/posts', requirePortalAuth, upload.array('images', 10), portalCtrl.createPost);
     router.put('/posts/:id', requirePortalAuth, portalCtrl.editPost);
     router.delete('/posts/:id', requirePortalAuth, portalCtrl.deletePost);

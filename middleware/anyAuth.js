@@ -14,15 +14,23 @@ const JWT_SECRET = process.env.JWT_SECRET;
  */
 const requireAnyAuth = (req, res, next) => {
     try {
+        let token = null;
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.substring(7);
+        } else if (req.query.token) {
+            // Fallback for media tags that don't support custom headers
+            token = req.query.token;
+        }
+
+        if (!token) {
             return res.status(401).json({
                 success: false,
                 message: 'No token provided.'
             });
         }
 
-        const token = authHeader.substring(7);
         const decoded = jwt.verify(token, JWT_SECRET);
 
         if (decoded.type === 'member_portal') {
