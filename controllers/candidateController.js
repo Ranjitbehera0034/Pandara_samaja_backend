@@ -26,13 +26,14 @@ exports.create = async (req, res, next) => {
       father: body.father_name || body.father,
       phone: body.mobile || body.phone,
       author_id: req.anyUser ? req.anyUser.id : null,
-      status: 'pending' // Initial status
+      // Admin users can set status (e.g. 'approved'); members default to 'pending'
+      status: (req.anyUser && req.anyUser.type === 'admin' && body.status) ? body.status : 'pending'
     };
 
     // 1. Validate required fields
-    if (!data.name || !data.gender) {
+    if (!data.name) {
       return res.status(400).json({
-        error: 'Name and gender are required'
+        error: 'Name is required'
       });
     }
 
