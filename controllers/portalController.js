@@ -138,7 +138,16 @@ exports.getSignedMediaUrl = async (req, res) => {
         const [metadata] = await file.getMetadata();
         const fileSize = parseInt(metadata.size);
         const contentType = metadata.contentType || 'application/octet-stream';
-        
+
+        // Helmet sets a global X-Frame-Options: DENY, which blocks PDFs/docs
+        // served here from rendering inside the frontend's <iframe> preview.
+        // Override it just for this route, scoped to our known frontend origins.
+        res.removeHeader('X-Frame-Options');
+        res.setHeader(
+            'Content-Security-Policy',
+            "frame-ancestors 'self' https://nikhilaodishapandarasamaja.in https://*.nikhilaodishapandarasamaja.in"
+        );
+
         const range = req.headers.range;
 
         if (range) {
