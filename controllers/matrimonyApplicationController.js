@@ -80,7 +80,7 @@ exports.submitForm = async (req, res) => {
             uploadedByName: member.name,
             uploadedByMobile: member.mobile,
             memberMobile: member.mobile,
-            uploadedFileUrl: fileUrl,
+            uploadedFileUrl: form_file_url,
             fileType,
         });
 
