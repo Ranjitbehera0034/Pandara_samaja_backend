@@ -201,7 +201,7 @@ exports.getDashboardStats = async (req, res, next) => {
         SELECT 
             (SELECT COALESCE(SUM(array_length(images, 1)), 0) FROM portal_posts) + 
             (SELECT COUNT(*) FROM portal_photos) as total_images,
-            (SELECT COUNT(*) FROM portal_posts WHERE videos IS NOT NULL AND array_length(videos, 1) > 0) as total_videos,
+            (SELECT COUNT(DISTINCT video_id) FROM portal_video_views_log) + (SELECT COUNT(*) FROM portal_reels) as total_videos,
             (SELECT COUNT(*) FROM portal_likes) as total_likes,
             (SELECT COUNT(*) FROM portal_comments) as total_comments
     `);
